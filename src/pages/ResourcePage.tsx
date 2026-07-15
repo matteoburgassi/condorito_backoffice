@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Plus, Search, Pencil, Trash2, Inbox } from 'lucide-react';
-import { resourceByKey, type Resource } from '../lib/resources';
+import { resourceByKey, isResourceVisible, type Resource } from '../lib/resources';
 import { supabase } from '../lib/supabase';
 import { useProduct } from '../lib/ProductContext';
 import { Modal } from '../components/Modal';
@@ -26,7 +26,7 @@ function formatCell(resource: Resource, col: string, value: unknown) {
 
 export function ResourcePage() {
   const { key = '' } = useParams();
-  const resource = resourceByKey(key);
+  const resource = isResourceVisible(key) ? resourceByKey(key) : undefined;
   const { productId, current } = useProduct();
 
   const [rows, setRows] = useState<Row[]>([]);

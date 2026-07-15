@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { LayoutDashboard, MonitorSmartphone, LogOut, Menu as MenuIcon } from 'lucide-react';
-import { RESOURCES, RESOURCE_GROUPS } from '../lib/resources';
+import { VISIBLE_RESOURCES, VISIBLE_GROUPS } from '../lib/resources';
 import { ResourceIcon } from '../components/ResourceIcon';
 import { useAuth } from '../lib/AuthContext';
 import { useProduct } from '../lib/ProductContext';
@@ -35,10 +35,10 @@ export function AppLayout() {
           </NavLink>
         </nav>
 
-        {RESOURCE_GROUPS.map((group) => (
+        {VISIBLE_GROUPS.map((group) => (
           <div className="nav-group" key={group}>
             <div className="nav-group-label">{group}</div>
-            {RESOURCES.filter((r) => r.group === group).map((r) => (
+            {VISIBLE_RESOURCES.filter((r) => r.group === group).map((r) => (
               <NavLink key={r.key} to={`/r/${r.key}`} className="nav-item" onClick={close}>
                 <ResourceIcon name={r.icon} />
                 {r.label}

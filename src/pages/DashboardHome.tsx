@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, MonitorSmartphone } from 'lucide-react';
-import { RESOURCES, RESOURCE_GROUPS } from '../lib/resources';
+import { VISIBLE_RESOURCES, VISIBLE_GROUPS } from '../lib/resources';
 import { ResourceIcon } from '../components/ResourceIcon';
 import { supabase } from '../lib/supabase';
 import { useProduct } from '../lib/ProductContext';
 
 const STAT_TABLES: { table: string; label: string; scoped: boolean }[] = [
-  { table: 'comics', label: 'Comics', scoped: false },
-  { table: 'jokes', label: 'Jokes', scoped: false },
-  { table: 'characters', label: 'Characters', scoped: false },
   { table: 'product_translations', label: 'Translations', scoped: true },
+  { table: 'product_feature_flags', label: 'Feature flags', scoped: true },
+  { table: 'product_menu_items', label: 'Menu items', scoped: true },
+  { table: 'product_screens', label: 'Screens', scoped: true },
 ];
 
 export function DashboardHome() {
@@ -71,11 +71,11 @@ export function DashboardHome() {
         <ArrowRight size={18} style={{ color: 'var(--text-muted)' }} />
       </Link>
 
-      {RESOURCE_GROUPS.map((group) => (
+      {VISIBLE_GROUPS.map((group) => (
         <div key={group} style={{ marginBottom: 24 }}>
           <div className="nav-group-label" style={{ padding: '0 0 10px' }}>{group}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-            {RESOURCES.filter((r) => r.group === group).map((r) => (
+            {VISIBLE_RESOURCES.filter((r) => r.group === group).map((r) => (
               <Link key={r.key} to={`/r/${r.key}`} className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px' }}>
                 <div style={{ color: 'var(--primary)' }}>
                   <ResourceIcon name={r.icon} size={18} />
