@@ -7,6 +7,7 @@ import { AppLayout } from './pages/AppLayout';
 import { DashboardHome } from './pages/DashboardHome';
 import { ResourcePage } from './pages/ResourcePage';
 import { ScreensPage } from './pages/ScreensPage';
+import { HelpPage } from './pages/HelpPage';
 import { Spinner } from './components/Spinner';
 
 function Gate() {
@@ -29,6 +30,7 @@ function Gate() {
         <Route element={<AppLayout />}>
           <Route index element={<DashboardHome />} />
           <Route path="screens" element={<ScreensPage />} />
+          <Route path="help" element={<HelpPage />} />
           <Route path="r/:key" element={<ResourcePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
