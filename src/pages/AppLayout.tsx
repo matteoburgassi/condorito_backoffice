@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { LayoutDashboard, MonitorSmartphone, LogOut, Menu as MenuIcon } from 'lucide-react';
+import { LayoutDashboard, MonitorSmartphone, HelpCircle, LogOut, Menu as MenuIcon } from 'lucide-react';
 import { VISIBLE_RESOURCES, VISIBLE_GROUPS } from '../lib/resources';
 import { ResourceIcon } from '../components/ResourceIcon';
 import { useAuth } from '../lib/AuthContext';
@@ -32,6 +32,10 @@ export function AppLayout() {
           <NavLink to="/screens" className="nav-item" onClick={close}>
             <MonitorSmartphone size={17} />
             App Screens
+          </NavLink>
+          <NavLink to="/help" className="nav-item" onClick={close}>
+            <HelpCircle size={17} />
+            Help &amp; Reference
           </NavLink>
         </nav>
 
