@@ -153,11 +153,12 @@ export const WIDGETS: WidgetDoc[] = [
   {
     type: 'banner',
     label: 'Banner',
-    description: 'Promotional banner with a title and call-to-action. Static (no binding).',
+    description: 'Promotional banner with a title and call-to-action. Use audience to limit who sees it.',
     binding: 'none',
     sources: [],
     example: {
       backgroundColor: '#E8452D',
+      audience: 'all',
       i18n: { title: 'home.banner_title', ctaLabel: 'common.ver_mas' },
       title: '¡Nuevo!',
       ctaLabel: 'Ver más',
@@ -242,3 +243,67 @@ export const WIDGETS: WidgetDoc[] = [
     example: { title: 'Revista', pdfUrl: 'https://…', issueNumber: 1, year: 2024 },
   },
 ];
+
+export const SECTION_AUDIENCES = [
+  { value: 'all', label: 'Everyone' },
+  { value: 'guest', label: 'Guests only (not logged in)' },
+  { value: 'logged_in', label: 'Logged-in users only' },
+  { value: 'non_premium', label: 'Non-premium (guests + free users)' },
+] as const;
+
+/** Ready-made banner sections for the screen composer (Area Libre + Subscribe). */
+export const BANNER_PRESETS: Record<
+  string,
+  { label: string; type: string; config: Record<string, unknown> }
+> = {
+  area_libre: {
+    label: 'Area Libre (free taste → /freemium)',
+    type: 'banner',
+    config: {
+      key: 'home_area_libre',
+      audience: 'guest',
+      variant: 'columns',
+      backgroundColor: '#007DBD',
+      assets: { pattern: 'pattern_banner', character: 'condorito-1' },
+      i18n: {
+        title: 'home.area_libre',
+        subtitle: 'home.comic',
+        subtitle2: 'home.chistes',
+        ctaLabel: 'home.lee_gratis',
+      },
+      title: 'Area Libre',
+      subtitle: 'Comic',
+      subtitle2: 'Chistes',
+      ctaLabel: 'Lee Todo Gratis',
+      ctaAction: { type: 'navigate', route: '/freemium' },
+    },
+  },
+  subscribe: {
+    label: 'Subscribe (Suscríbete)',
+    type: 'banner',
+    config: {
+      key: 'suscribete_banner',
+      audience: 'non_premium',
+      variant: 'subscription',
+      backgroundColor: '#E85D9F',
+      assets: {
+        pattern: 'pattern_banner2',
+        character: 'banner2-condorito',
+        topImage: 'subscribe-banner-comics',
+      },
+      i18n: {
+        title: 'home.suscribete_banner_title',
+        subtitle: 'home.suscribete_banner_subtitle',
+        ctaLabel: 'home.suscribete_btn',
+      },
+      title: '¡Accede a toda la colección de cómics de Condorito!',
+      subtitle: 'Suscríbete y lee sin límites',
+      ctaLabel: 'Suscríbete Ahora',
+      ctaAction: { type: 'show_subscription' },
+    },
+  },
+};
+
+export function widgetByType(type: string): WidgetDoc | undefined {
+  return WIDGETS.find((w) => w.type === type);
+}

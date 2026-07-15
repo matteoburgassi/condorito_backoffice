@@ -9,6 +9,7 @@ import {
   MonitorSmartphone,
   Layers,
 } from 'lucide-react';
+import { BANNER_PRESETS, WIDGETS } from '../lib/widgetCatalog';
 import { supabase } from '../lib/supabase';
 import { useProduct } from '../lib/ProductContext';
 import { Modal } from '../components/Modal';
@@ -435,6 +436,22 @@ function SectionModal({
   const [active, setActive] = useState(record?.is_active ?? true);
   const [err, setErr] = useState<string | null>(null);
 
+  const applyPreset = (presetKey: string) => {
+    const preset = BANNER_PRESETS[presetKey];
+    if (!preset) return;
+    setType(preset.type);
+    setConfig(JSON.stringify(preset.config, null, 2));
+    setErr(null);
+  };
+
+  const loadWidgetExample = (widgetType: string) => {
+    const doc = WIDGETS.find((w) => w.type === widgetType);
+    if (!doc) return;
+    setType(doc.type);
+    setConfig(JSON.stringify(doc.example, null, 2));
+    setErr(null);
+  };
+
   const submit = () => {
     if (!type.trim()) {
       setErr('Section type is required.');
@@ -464,20 +481,48 @@ function SectionModal({
       }
     >
       {err && <div className="alert alert-error">{err}</div>}
+      {!record && (
+        <div className="field">
+          <label>Banner presets</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {Object.entries(BANNER_PRESETS).map(([key, preset]) => (
+              <button key={key} type="button" className="btn btn-ghost btn-sm" onClick={() => applyPreset(key)}>
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <div className="field-hint">Inserts a ready-made config including <code>audience</code> rules.</div>
+        </div>
+      )}
       <div className="field">
         <label htmlFor="type">Section type <span style={{ color: 'var(--primary)' }}>*</span></label>
-        <input id="type" value={type} onChange={(e) => setType(e.target.value)} placeholder="hero_banner" />
-        <div className="field-hint">Must match a widget the mobile renderer knows.</div>
+        <input
+          id="type"
+          list="widget-types"
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          placeholder="banner"
+        />
+        <datalist id="widget-types">
+          {WIDGETS.map((w) => (
+            <option key={w.type} value={w.type} />
+          ))}
+        </datalist>
+        <div className="field-hint" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+          {WIDGETS.slice(0, 6).map((w) => (
+            <button key={w.type} type="button" className="btn btn-ghost btn-sm" onClick={() => loadWidgetExample(w.type)}>
+              {w.label}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="field">
         <label htmlFor="config">Config (JSON)</label>
-        <textarea id="config" value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} style={{ minHeight: 160 }} />
+        <textarea id="config" value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} style={{ minHeight: 200 }} />
         <div className="field-hint">
-          Static widget props go at the top level. Reserved keys: <code>i18n</code> (
-          <code>{'{ "title": "home.tira_del_dia" }'}</code> translates a prop) and{' '}
-          <code>data_binding</code> (<code>{'{ "source": "container", "containerId": "..." }'}</code>{' '}
-          fills items from the content source). Sources: comics, jokes, characters, container,
-          continue_reading, latest_strip, collection_categories, static.
+          Top-level props become widget fields. Reserved keys: <code>i18n</code>, <code>data_binding</code>, and{' '}
+          <code>audience</code> (<code>guest</code>, <code>logged_in</code>, <code>non_premium</code>, or{' '}
+          <code>all</code>). The app filters by auth/subscription client-side.
         </div>
       </div>
       <div className="field">

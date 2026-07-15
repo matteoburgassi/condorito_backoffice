@@ -43,7 +43,7 @@ export function HelpPage() {
         <h2>Screens &amp; sections</h2>
         <p>
           A screen’s <Code>slug</Code> must match what the app requests. Valid slugs:{' '}
-          <Code>home</Code>, <Code>colecciones</Code>, <Code>colecciones-search</Code>,{' '}
+          <Code>home</Code>, <Code>freemium</Code>, <Code>colecciones</Code>, <Code>colecciones-search</Code>,{' '}
           <Code>colecciones-category</Code>, <Code>personajes</Code>, <Code>comic-detail</Code>.
         </p>
         <p>
@@ -61,6 +61,29 @@ export function HelpPage() {
           </p>
           <Json value={{ data_binding: { source: 'characters', limit: 10 } }} />
         </div>
+        <p style={{ marginTop: 14 }}>
+          <strong>Audience</strong> — limit who sees a section (filtered by the app):
+        </p>
+        <div className="card table-wrap" style={{ marginTop: 8 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Value</th>
+                <th>Who sees it</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><span className="cell-mono">all</span></td><td>Everyone (default)</td></tr>
+              <tr><td><span className="cell-mono">guest</span></td><td>Not logged in — use for <strong>Area Libre</strong></td></tr>
+              <tr><td><span className="cell-mono">logged_in</span></td><td>Signed-in users — e.g. continue-reading rail</td></tr>
+              <tr><td><span className="cell-mono">non_premium</span></td><td>Guests + free users — use for <strong>Subscribe</strong> banner</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style={{ marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
+          Use <strong>Banner presets</strong> when adding a section on the Screens page — they include the correct{' '}
+          <code>audience</code> and artwork keys.
+        </p>
       </div>
 
       <div className="doc-section">
