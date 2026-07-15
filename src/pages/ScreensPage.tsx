@@ -10,6 +10,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useProduct } from '../lib/ProductContext';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Switch } from '../components/Switch';
@@ -26,6 +27,7 @@ type Section = {
 };
 
 export function ScreensPage() {
+  const { productId, current } = useProduct();
   const [screens, setScreens] = useState<Screen[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
@@ -40,8 +42,18 @@ export function ScreensPage() {
   const [busy, setBusy] = useState(false);
 
   const loadScreens = useCallback(async () => {
+    if (!productId) {
+      setScreens([]);
+      setSelectedId(null);
+      setLoadingScreens(false);
+      return;
+    }
     setLoadingScreens(true);
-    const { data, error } = await supabase.from('product_screens').select('*').order('slug');
+    const { data, error } = await supabase
+      .from('product_screens')
+      .select('*')
+      .eq('product_id', productId)
+      .order('slug');
     if (error) setError(error.message);
     else {
       const list = (data as Screen[]) ?? [];
@@ -49,7 +61,7 @@ export function ScreensPage() {
       setSelectedId((prev) => (prev && list.some((s) => s.id === prev) ? prev : list[0]?.id ?? null));
     }
     setLoadingScreens(false);
-  }, []);
+  }, [productId]);
 
   const loadSections = useCallback(async (screenId: string) => {
     setLoadingSections(true);
@@ -82,8 +94,14 @@ export function ScreensPage() {
     if (screenModal?.record) {
       const { error } = await supabase.from('product_screens').update(values).eq('id', screenModal.record.id);
       err = error?.message ?? null;
+    } else if (!productId) {
+      err = 'Select a product before creating a screen.';
     } else {
-      const { data, error } = await supabase.from('product_screens').insert(values).select('id').maybeSingle();
+      const { data, error } = await supabase
+        .from('product_screens')
+        .insert({ ...values, product_id: productId })
+        .select('id')
+        .maybeSingle();
       err = error?.message ?? null;
       newId = data?.id ?? null;
     }
@@ -195,17 +213,22 @@ export function ScreensPage() {
           <h1 className="page-title">App Screens</h1>
           <p className="page-desc">
             Data-driven layouts rendered by the <code>condorito-screen</code> function, ordered by position.
+            {current ? ` · ${current.display_name}` : ''}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => { setError(null); setScreenModal({ record: null }); }}>
-          <Plus size={16} />
-          New Screen
-        </button>
+        {productId && (
+          <button className="btn btn-primary" onClick={() => { setError(null); setScreenModal({ record: null }); }}>
+            <Plus size={16} />
+            New Screen
+          </button>
+        )}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {loadingScreens ? (
+      {!productId ? (
+        <div className="card empty">Select a product to manage its screens.</div>
+      ) : loadingScreens ? (
         <Spinner label="Loading screens..." />
       ) : screens.length === 0 ? (
         <div className="card empty">
@@ -449,7 +472,13 @@ function SectionModal({
       <div className="field">
         <label htmlFor="config">Config (JSON)</label>
         <textarea id="config" value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} style={{ minHeight: 160 }} />
-        <div className="field-hint">Shape must match what the widget expects.</div>
+        <div className="field-hint">
+          Static widget props go at the top level. Reserved keys: <code>i18n</code> (
+          <code>{'{ "title": "home.tira_del_dia" }'}</code> translates a prop) and{' '}
+          <code>data_binding</code> (<code>{'{ "source": "container", "containerId": "..." }'}</code>{' '}
+          fills items from the content source). Sources: comics, jokes, characters, container,
+          continue_reading, latest_strip, collection_categories, static.
+        </div>
       </div>
       <div className="field">
         <Switch checked={active} onChange={setActive} label="Active (rendered by the app)" />
