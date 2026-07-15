@@ -353,21 +353,6 @@ export const RESOURCES: Resource[] = [
 
 export const RESOURCE_GROUPS = ['Content', 'Localization', 'Configuration', 'Navigation'];
 
-// Content management (comics, jokes, characters, containers, collection
-// categories, games, strips) is intentionally hidden from the UI for now; the
-// tables and their RLS policies remain in place. To re-enable it later, remove
-// 'Content' from HIDDEN_GROUPS.
-export const HIDDEN_GROUPS = ['Content'];
-
-export const VISIBLE_GROUPS = RESOURCE_GROUPS.filter((g) => !HIDDEN_GROUPS.includes(g));
-
-export const VISIBLE_RESOURCES = RESOURCES.filter((r) => !HIDDEN_GROUPS.includes(r.group));
-
 export function resourceByKey(key: string): Resource | undefined {
   return RESOURCES.find((r) => r.key === key);
-}
-
-export function isResourceVisible(key: string): boolean {
-  const r = resourceByKey(key);
-  return !!r && !HIDDEN_GROUPS.includes(r.group);
 }

@@ -225,22 +225,6 @@ tbody tr:hover { background: var(--surface-2); }
   .content { padding: 20px 16px; }
   .grid-2 { grid-template-columns: 1fr; }
 }
-/* Help / docs */
-.doc-section { margin-bottom: 28px; }
-.doc-section h2 { font-size: 16px; margin-bottom: 6px; }
-.doc-section p { color: var(--text-muted); font-size: 14px; margin-bottom: 10px; }
-.doc-card { padding: 16px 18px; margin-bottom: 12px; }
-.doc-code {
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; line-height: 1.5;
-  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
-  padding: 12px 14px; margin-top: 10px; overflow-x: auto; color: var(--text); white-space: pre;
-}
-.doc-inline { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; color: var(--text); }
-.tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: var(--surface-3); color: var(--text-muted); border: 1px solid var(--border); }
-.tag-binding { background: var(--primary-soft); color: #ffb3ae; border-color: rgba(230,51,41,0.25); }
-.doc-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.doc-head-row .doc-inline { font-weight: 600; }
-
 .overlay-mask { display: none; }
 .burger { display: none; }
 @media (max-width: 820px) {
