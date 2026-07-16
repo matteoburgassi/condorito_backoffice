@@ -41,6 +41,8 @@ export function ScreensPage() {
   const [deleteScreen, setDeleteScreen] = useState<Screen | null>(null);
   const [deleteSection, setDeleteSection] = useState<Section | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
 
   const loadScreens = useCallback(async () => {
     if (!productId) {
@@ -207,6 +209,31 @@ export function ScreensPage() {
     loadSections(selectedId);
   };
 
+  const handleDrop = async (dropIndex: number) => {
+    const from = dragIndex;
+    setDragIndex(null);
+    setOverIndex(null);
+    if (from === null || from === dropIndex || !selectedId) return;
+    const prev = sections;
+    const reordered = [...sections];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(dropIndex, 0, moved);
+    const withPos = reordered.map((s, i) => ({ ...s, position: i }));
+    setSections(withPos);
+    const changed = withPos.filter((s, i) => prev.find((o) => o.id === s.id)?.position !== i);
+    for (const s of changed) {
+      const { error } = await supabase
+        .from('product_screen_sections')
+        .update({ position: s.position })
+        .eq('id', s.id);
+      if (error) {
+        setError(error.message);
+        break;
+      }
+    }
+    loadSections(selectedId);
+  };
+
   return (
     <div>
       <div className="page-head">
@@ -292,7 +319,21 @@ export function ScreensPage() {
                 ) : (
                   <div className="sections-list">
                     {sections.map((sec, i) => (
-                      <div key={sec.id} className={`section-row${sec.is_active ? '' : ' inactive'}`}>
+                      <div
+                        key={sec.id}
+                        className={`section-row${sec.is_active ? '' : ' inactive'}`}
+                        draggable
+                        onDragStart={(e) => { setDragIndex(i); e.dataTransfer.effectAllowed = 'move'; }}
+                        onDragEnter={() => setOverIndex(i)}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={() => handleDrop(i)}
+                        onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+                        style={{
+                          opacity: dragIndex === i ? 0.4 : undefined,
+                          outline: overIndex === i && dragIndex !== null && dragIndex !== i ? '2px dashed var(--primary)' : undefined,
+                          outlineOffset: -1,
+                        }}
+                      >
                         <div className="order-btns">
                           <button className="btn-icon" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
                             <ChevronUp size={16} />
@@ -301,7 +342,7 @@ export function ScreensPage() {
                             <ChevronDown size={16} />
                           </button>
                         </div>
-                        <div className="section-grip"><GripVertical size={16} /></div>
+                        <div className="section-grip" style={{ cursor: 'grab' }} title="Drag to reorder"><GripVertical size={16} /></div>
                         <div className="section-main">
                           <div className="section-type">
                             <span style={{ color: 'var(--text-faint)', marginRight: 8 }}>{i + 1}.</span>
