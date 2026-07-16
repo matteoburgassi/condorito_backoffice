@@ -237,7 +237,7 @@ export function ScreensPage() {
           No screens yet. Create one to start composing sections.
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 280px) 1fr', gap: 20, alignItems: 'start' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(200px, 260px) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
           <div className="card" style={{ padding: 8 }}>
             {screens.map((s) => (
               <button
