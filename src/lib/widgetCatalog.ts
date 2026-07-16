@@ -302,6 +302,24 @@ export const BANNER_PRESETS: Record<
       ctaAction: { type: 'show_subscription' },
     },
   },
+  continue_reading: {
+    label: 'Continua Leyendo (logged-in)',
+    type: 'comic-carousel',
+    config: {
+      key: 'continua_leyendo',
+      audience: 'logged_in',
+      variant: 'continue-reading',
+      backgroundColor: '#FDF5C4',
+      i18n: { title: 'home.continua_leyendo' },
+      title: 'Continua Leyendo',
+      emptyMessage: 'Sin comics disponibles',
+      headerAction: {
+        label: '',
+        action: { type: 'navigate', route: '/colecciones' },
+      },
+      data_binding: { source: 'continue_reading' },
+    },
+  },
 };
 
 export function widgetByType(type: string): WidgetDoc | undefined {
