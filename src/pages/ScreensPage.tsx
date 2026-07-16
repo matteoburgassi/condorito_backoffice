@@ -524,7 +524,7 @@ function SectionModal({
       {err && <div className="alert alert-error">{err}</div>}
       {!record && (
         <div className="field">
-          <label>Banner presets</label>
+          <label>Section presets</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {Object.entries(BANNER_PRESETS).map(([key, preset]) => (
               <button key={key} type="button" className="btn btn-ghost btn-sm" onClick={() => applyPreset(key)}>
@@ -532,7 +532,10 @@ function SectionModal({
               </button>
             ))}
           </div>
-          <div className="field-hint">Inserts a ready-made config including <code>audience</code> rules.</div>
+          <div className="field-hint">
+            Ready-made sections: Area Libre, Subscribe, Continua Leyendo (includes{' '}
+            <code>audience</code> / <code>variant</code>).
+          </div>
         </div>
       )}
       <div className="field">

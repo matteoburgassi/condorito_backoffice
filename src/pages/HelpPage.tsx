@@ -81,8 +81,8 @@ export function HelpPage() {
           </table>
         </div>
         <p style={{ marginTop: 12, fontSize: 13, color: 'var(--text-muted)' }}>
-          Use <strong>Banner presets</strong> when adding a section on the Screens page — they include the correct{' '}
-          <code>audience</code> and artwork keys.
+          Use <strong>Section presets</strong> when adding a section on the Screens page — Area Libre,
+          Subscribe, and Continua Leyendo include the correct <code>audience</code> / <code>variant</code>.
         </p>
       </div>
 
