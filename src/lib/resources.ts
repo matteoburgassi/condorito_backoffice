@@ -156,11 +156,12 @@ export const RESOURCES: Resource[] = [
       { name: 'subtitle', label: 'Subtitle', type: 'text' },
       { name: 'background_color', label: 'Background color', type: 'text', hint: 'Hex or token, e.g. #E63329' },
       { name: 'character_asset', label: 'Character asset', type: 'text' },
+      { name: 'cms_id', label: 'CMS ID', type: 'text', hint: 'Catalog CMS id. Used as the detail route param and the comics container_id.' },
       { name: 'action_route', label: 'Action route', type: 'text' },
       { name: 'sort_order', label: 'Sort order', type: 'number' },
       { name: 'is_visible', label: 'Visible', type: 'boolean' },
     ],
-    listColumns: ['sort_order', 'id', 'title', 'is_visible'],
+    listColumns: ['sort_order', 'id', 'title', 'cms_id', 'is_visible'],
   },
   {
     key: 'games',
