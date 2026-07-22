@@ -40,9 +40,92 @@ export function HelpPage() {
       </div>
 
       <div className="doc-section">
+        <h2>App structure</h2>
+        <p>
+          Use this map when composing layouts in <strong>App Screens</strong>. Each app surface requests a screen
+          by <Code>slug</Code>; the slug on the Screens page must match exactly.
+        </p>
+        <div className="card table-wrap" style={{ marginTop: 8 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Screen slug</th>
+                <th>App surface</th>
+                <th>Params</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span className="cell-mono">home</span></td>
+                <td>Home tab</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><span className="cell-mono">colecciones</span></td>
+                <td>Colecciones list</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><span className="cell-mono">colecciones-search</span></td>
+                <td>Colecciones search results</td>
+                <td><span className="cell-mono">q</span> — search query</td>
+              </tr>
+              <tr>
+                <td><span className="cell-mono">colecciones-category</span></td>
+                <td>Category detail</td>
+                <td>
+                  <span className="cell-mono">slug</span> — category <Code>cms_id</Code> (also used as comics{' '}
+                  <Code>container_id</Code>)
+                </td>
+              </tr>
+              <tr>
+                <td><span className="cell-mono">personajes</span></td>
+                <td>Personajes</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><span className="cell-mono">freemium</span></td>
+                <td>Area libre / freemium</td>
+                <td>—</td>
+              </tr>
+              <tr>
+                <td><span className="cell-mono">comic-detail</span></td>
+                <td>Comic detail</td>
+                <td><span className="cell-mono">id</span> — comic id</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div className="card doc-card" style={{ marginTop: 14 }}>
+          <p style={{ marginBottom: 6 }}>
+            <strong>Composition</strong> — a screen is an ordered list of sections. Each section’s{' '}
+            <Code>type</Code> is a widget; <Code>config</Code> holds static props plus optional{' '}
+            <Code>i18n</Code>, <Code>data_binding</Code>, and <Code>audience</Code>. Details are in{' '}
+            <strong>Screens &amp; sections</strong>, <strong>Data sources</strong>, and{' '}
+            <strong>Widget reference</strong> below.
+          </p>
+          <p style={{ marginBottom: 6 }}>
+            <strong>Active / fallback</strong> — the screen <em>and</em> at least one section must be{' '}
+            <strong>Active</strong>, or <Code>condorito-screen</Code> serves the app’s built-in layout.
+          </p>
+          <p style={{ marginBottom: 6 }}>
+            <strong>Params</strong> — category detail bindings (<Code>comics</Code>,{' '}
+            <Code>current_category</Code>) read the route <Code>slug</Code>; search filters with{' '}
+            <Code>q</Code>; comic-detail loads by <Code>id</Code>.
+          </p>
+          <p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>
+            Catalogue content (comics, categories, containers, …) lives in database tables managed outside this
+            UI for now. Empty bindings render empty widgets.
+          </p>
+        </div>
+      </div>
+
+      <div className="doc-section">
         <h2>Screens &amp; sections</h2>
         <p>
-          A screen’s <Code>slug</Code> must match what the app requests. Valid slugs:{' '}
+          A screen’s <Code>slug</Code> must match what the app requests (see <strong>App structure</strong>).
+          Valid slugs:{' '}
           <Code>home</Code>, <Code>freemium</Code>, <Code>colecciones</Code>, <Code>colecciones-search</Code>,{' '}
           <Code>colecciones-category</Code>, <Code>personajes</Code>, <Code>comic-detail</Code>.
         </p>
