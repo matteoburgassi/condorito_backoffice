@@ -36,6 +36,18 @@ export const DATA_SOURCES: SourceDoc[] = [
 
 export const WIDGETS: WidgetDoc[] = [
   {
+    type: 'sub-header',
+    label: 'Sub Header',
+    description: 'Sub Header widget that holds the title (plus optional subtitle) of the screen plus an optional go back icon on the left',
+    binding: 'none',
+    sources: ['static'],
+    example: {
+      title: 'Free Area',
+      subtitle: 'Todos los contenidos GRATIS!',
+      show_back: 'true',
+    },
+  },
+  {
     type: 'comic-carousel',
     label: 'Comic carousel',
     description: 'Horizontal rail of comic covers with issue/year and premium gating.',
