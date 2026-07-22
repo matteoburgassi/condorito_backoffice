@@ -30,12 +30,6 @@ export const DATA_SOURCES: SourceDoc[] = [
   { source: 'container', description: 'Resolves a container and returns its comics or jokes by content type.', params: 'containerId (required), limit?', fills: 'items' },
   { source: 'continue_reading', description: 'The signed-in user’s reading progress (empty for guests).', params: '—', fills: 'items' },
   { source: 'collection_categories', description: 'Collection category tiles.', params: '—', fills: 'items' },
-  {
-    source: 'current_category',
-    description: 'Collection category named by the screen slug (cms_id); used on colecciones-category.',
-    params: '— (uses screen slug)',
-    fills: 'title, subtitle, backgroundColor, characterAsset, backRoute',
-  },
   { source: 'latest_strip', description: 'Latest “tira del día”; fills the PDF fields of an inline-pdf.', params: 'freeOnly?', fills: 'pdfUrl, aspectRatio, action' },
   { source: 'static', description: 'Use the items you provide verbatim in the config.', params: 'items[]', fills: 'items' },
 ];
@@ -196,17 +190,15 @@ export const WIDGETS: WidgetDoc[] = [
   {
     type: 'detail-header',
     label: 'Detail header',
-    description: 'Header with back/bell, background color and optional character art. Use current_category on colecciones-category for a dynamic header.',
-    binding: 'special',
-    sources: ['current_category'],
+    description: 'Header with back/bell, background color and optional character art.',
+    binding: 'none',
+    sources: [],
     example: {
-      title: 'SERIE REGULAR',
-      backgroundColor: '#E91E8C',
+      title: 'RESULTADOS',
+      backgroundColor: '#FFDD00',
       showBack: true,
-      backRoute: '/colecciones',
-      showBell: false,
-      embedded: true,
-      data_binding: { source: 'current_category' },
+      showBell: true,
+      tone: 'on-light',
     },
   },
   {
