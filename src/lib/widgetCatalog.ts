@@ -44,7 +44,7 @@ export const WIDGETS: WidgetDoc[] = [
     example: {
       title: 'Free Area',
       subtitle: 'Todos los contenidos GRATIS!',
-      show_back: 'true',
+      show_back: true,
     },
   },
   {
