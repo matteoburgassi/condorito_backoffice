@@ -9,13 +9,28 @@ import {
   MonitorSmartphone,
   Layers,
 } from 'lucide-react';
-import { BANNER_PRESETS, WIDGETS } from '../lib/widgetCatalog';
+import {
+  BANNER_PRESETS,
+  WIDGETS,
+  defaultConfigForWidget,
+} from '../lib/widgetCatalog';
+import {
+  asWidgetConfig,
+  normalizeTranslations,
+  parseWidgetConfigJson,
+  stringifyWidgetConfig,
+  validateWidgetConfig,
+} from '../lib/widgetSchema';
 import { supabase } from '../lib/supabase';
 import { useProduct } from '../lib/ProductContext';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Switch } from '../components/Switch';
 import { Spinner } from '../components/Spinner';
+import {
+  WidgetSchemaForm,
+  WidgetTranslationFields,
+} from '../components/WidgetSchemaForm';
 
 type Screen = { id: string; slug: string; title: string; is_active: boolean };
 type Section = {
@@ -472,24 +487,86 @@ function SectionModal({
   onCancel: () => void;
   onSubmit: (v: { type: string; config: unknown; is_active: boolean }) => void;
 }) {
-  const [type, setType] = useState(record?.type ?? '');
-  const [config, setConfig] = useState(record ? JSON.stringify(record.config ?? {}, null, 2) : '{\n  \n}');
+  const initialType = record?.type ?? '';
+  const initialConfig = record?.config ?? {};
+  const [type, setType] = useState(initialType);
+  const [configValue, setConfigValue] = useState(() => asWidgetConfig(initialConfig));
+  const [config, setConfig] = useState(() => stringifyWidgetConfig(initialConfig));
+  const [advancedJson, setAdvancedJson] = useState(false);
   const [active, setActive] = useState(record?.is_active ?? true);
   const [err, setErr] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  const widget = WIDGETS.find((candidate) => candidate.type === type);
+  const schema = widget?.schema;
+
+  const replaceConfiguration = (
+    nextType: string,
+    nextConfig: Record<string, unknown>,
+  ) => {
+    const hasUnsavedConfiguration =
+      type !== initialType ||
+      JSON.stringify(configValue) !== JSON.stringify(asWidgetConfig(initialConfig)) ||
+      (advancedJson && config !== stringifyWidgetConfig(initialConfig));
+
+    if (
+      nextType !== type &&
+      type !== '' &&
+      hasUnsavedConfiguration &&
+      !window.confirm('Changing section type will replace the current configuration. Continue?')
+    ) {
+      return;
+    }
+
+    setType(nextType);
+    setConfigValue(nextConfig);
+    setConfig(stringifyWidgetConfig(nextConfig));
+    setAdvancedJson(false);
+    setFieldErrors({});
+    setErr(null);
+  };
+
+  const selectType = (nextType: string) => {
+    const nextWidget = WIDGETS.find((candidate) => candidate.type === nextType);
+    replaceConfiguration(
+      nextType,
+      nextWidget ? defaultConfigForWidget(nextWidget) : {},
+    );
+  };
 
   const applyPreset = (presetKey: string) => {
     const preset = BANNER_PRESETS[presetKey];
     if (!preset) return;
-    setType(preset.type);
-    setConfig(JSON.stringify(preset.config, null, 2));
-    setErr(null);
+    replaceConfiguration(preset.type, preset.config);
   };
 
   const loadWidgetExample = (widgetType: string) => {
     const doc = WIDGETS.find((w) => w.type === widgetType);
     if (!doc) return;
-    setType(doc.type);
-    setConfig(JSON.stringify(doc.example, null, 2));
+    replaceConfiguration(doc.type, defaultConfigForWidget(doc));
+  };
+
+  const parseObjectConfig = () => {
+    const parsed = parseWidgetConfigJson(config);
+    if (parsed.error) {
+      setErr(parsed.error);
+      return null;
+    }
+    return parsed.config;
+  };
+
+  const toggleAdvancedJson = () => {
+    if (!advancedJson) {
+      setConfig(stringifyWidgetConfig(configValue));
+      setAdvancedJson(true);
+      setErr(null);
+      return;
+    }
+
+    const parsed = parseObjectConfig();
+    if (!parsed) return;
+    setConfigValue(parsed);
+    setAdvancedJson(false);
     setErr(null);
   };
 
@@ -498,13 +575,34 @@ function SectionModal({
       setErr('Section type is required.');
       return;
     }
-    let parsed: unknown;
-    try {
-      parsed = config.trim() === '' ? {} : JSON.parse(config);
-    } catch {
-      setErr('Config must be valid JSON.');
-      return;
+    let parsed: unknown = configValue;
+
+    if (!schema || advancedJson) {
+      try {
+        parsed = config.trim() === '' ? {} : JSON.parse(config);
+      } catch {
+        setErr('Config must be valid JSON.');
+        return;
+      }
     }
+
+    if (schema) {
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        setErr('Config must be a JSON object.');
+        return;
+      }
+      const normalized = normalizeTranslations(parsed as Record<string, unknown>);
+      const validationErrors = validateWidgetConfig(schema, normalized);
+      setFieldErrors(validationErrors);
+      if (Object.keys(validationErrors).length > 0) {
+        setErr('Fix the highlighted configuration fields before saving.');
+        if (advancedJson) setConfig(stringifyWidgetConfig(normalized));
+        return;
+      }
+      parsed = normalized;
+    }
+
+    setErr(null);
     onSubmit({ type: type.trim(), config: parsed, is_active: active });
   };
 
@@ -540,18 +638,19 @@ function SectionModal({
       )}
       <div className="field">
         <label htmlFor="type">Section type <span style={{ color: 'var(--primary)' }}>*</span></label>
-        <input
+        <select
           id="type"
-          list="widget-types"
           value={type}
-          onChange={(e) => setType(e.target.value)}
-          placeholder="banner"
-        />
-        <datalist id="widget-types">
+          onChange={(e) => selectType(e.target.value)}
+        >
+          <option value="">Select a widget type</option>
+          {type && !WIDGETS.some((candidate) => candidate.type === type) && (
+            <option value={type}>{type} (custom)</option>
+          )}
           {WIDGETS.map((w) => (
-            <option key={w.type} value={w.type} />
+            <option key={w.type} value={w.type}>{w.label}</option>
           ))}
-        </datalist>
+        </select>
         <div className="field-hint" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
           {WIDGETS.slice(0, 6).map((w) => (
             <button key={w.type} type="button" className="btn btn-ghost btn-sm" onClick={() => loadWidgetExample(w.type)}>
@@ -560,15 +659,57 @@ function SectionModal({
           ))}
         </div>
       </div>
-      <div className="field">
-        <label htmlFor="config">Config (JSON)</label>
-        <textarea id="config" value={config} onChange={(e) => setConfig(e.target.value)} spellCheck={false} style={{ minHeight: 200 }} />
-        <div className="field-hint">
-          Top-level props become widget fields. Reserved keys: <code>i18n</code>, <code>data_binding</code>, and{' '}
-          <code>audience</code> (<code>guest</code>, <code>logged_in</code>, <code>non_premium</code>, or{' '}
-          <code>all</code>). The app filters by auth/subscription client-side.
+      {schema && !advancedJson ? (
+        <>
+          <WidgetSchemaForm
+            schema={schema}
+            value={configValue}
+            onChange={(next) => {
+              setConfigValue(next);
+              setFieldErrors({});
+              setErr(null);
+            }}
+            errors={fieldErrors}
+          />
+          <WidgetTranslationFields
+            schema={schema}
+            value={configValue}
+            onChange={(next) => {
+              setConfigValue(next);
+              setErr(null);
+            }}
+          />
+        </>
+      ) : (
+        <div className="field">
+          <label htmlFor="config">Config (JSON)</label>
+          <textarea
+            id="config"
+            value={config}
+            onChange={(e) => {
+              setConfig(e.target.value);
+              setErr(null);
+            }}
+            spellCheck={false}
+            style={{ minHeight: 200 }}
+          />
+          <div className="field-hint">
+            Top-level props become widget fields. Reserved keys: <code>i18n</code>, <code>data_binding</code>, and{' '}
+            <code>audience</code> (<code>guest</code>, <code>logged_in</code>, <code>non_premium</code>, or{' '}
+            <code>all</code>). The app filters by auth/subscription client-side.
+          </div>
         </div>
-      </div>
+      )}
+      {schema && (
+        <div className="field">
+          <button type="button" className="btn btn-ghost btn-sm" onClick={toggleAdvancedJson}>
+            {advancedJson ? 'Back to generated form' : 'Advanced JSON'}
+          </button>
+          <div className="field-hint">
+            Advanced JSON preserves custom fields that are not represented by this prototype form.
+          </div>
+        </div>
+      )}
       <div className="field">
         <Switch checked={active} onChange={setActive} label="Active (rendered by the app)" />
       </div>

@@ -5,6 +5,21 @@
 
 export type BindingSupport = 'none' | 'items' | 'special';
 
+export type WidgetSchema = {
+  type: 'object' | 'string' | 'boolean' | 'number' | 'array';
+  title?: string;
+  description?: string;
+  default?: unknown;
+  enum?: Array<string | number>;
+  minLength?: number;
+  properties?: Record<string, WidgetSchema>;
+  required?: string[];
+  items?: WidgetSchema;
+  additionalProperties?: boolean;
+  /** Marks literal string fields that can be overridden through config.i18n. */
+  'x-translatable'?: boolean;
+};
+
 export type WidgetDoc = {
   type: string;
   label: string;
@@ -14,6 +29,8 @@ export type WidgetDoc = {
   sources: string[];
   /** Copy-paste starter config for a section of this type. */
   example: Record<string, unknown>;
+  /** Runtime configuration contract used by the generated section form. */
+  schema?: WidgetSchema;
 };
 
 export type SourceDoc = {
@@ -21,6 +38,62 @@ export type SourceDoc = {
   description: string;
   params: string;
   fills: string;
+};
+
+function cloneValue<T>(value: T): T {
+  return value == null ? value : JSON.parse(JSON.stringify(value)) as T;
+}
+
+/** Recursively builds a starter value from JSON-schema defaults. */
+export function defaultsFromSchema(schema: WidgetSchema): unknown {
+  if (schema.default !== undefined) return cloneValue(schema.default);
+
+  if (schema.type === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, property] of Object.entries(schema.properties ?? {})) {
+      const value = defaultsFromSchema(property);
+      if (value !== undefined) result[key] = value;
+    }
+    return result;
+  }
+
+  if (schema.type === 'array') return [];
+  return undefined;
+}
+
+/** Schema defaults when available; legacy catalog examples otherwise. */
+export function defaultConfigForWidget(widget: WidgetDoc): Record<string, unknown> {
+  if (!widget.schema) return cloneValue(widget.example);
+  return (defaultsFromSchema(widget.schema) ?? {}) as Record<string, unknown>;
+}
+
+const SUB_HEADER_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['title'],
+  properties: {
+    title: {
+      type: 'string',
+      title: 'Title',
+      description: 'Main heading displayed by the sub-header.',
+      default: 'Free Area',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    subtitle: {
+      type: 'string',
+      title: 'Subtitle',
+      description: 'Optional supporting text displayed below the title.',
+      default: 'Todos los contenidos GRATIS!',
+      'x-translatable': true,
+    },
+    showBack: {
+      type: 'boolean',
+      title: 'Show back button',
+      description: 'Displays a back control on the left side.',
+      default: true,
+    },
+  },
 };
 
 export const DATA_SOURCES: SourceDoc[] = [
@@ -46,11 +119,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Sub Header widget that holds the title (plus optional subtitle) of the screen plus an optional go back icon on the left',
     binding: 'none',
     sources: ['static'],
-    example: {
-      title: 'Free Area',
-      subtitle: 'Todos los contenidos GRATIS!',
-      showBack: true,
-    },
+    schema: SUB_HEADER_SCHEMA,
+    example: defaultsFromSchema(SUB_HEADER_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'hero-image',
