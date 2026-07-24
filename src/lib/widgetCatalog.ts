@@ -26,7 +26,12 @@ export type SourceDoc = {
 export const DATA_SOURCES: SourceDoc[] = [
   { source: 'comics', description: 'Comics from the catalogue.', params: 'limit?, containerId?', fills: 'items' },
   { source: 'jokes', description: 'Jokes / editions.', params: 'limit?, containerId?, freeOnly?, title?', fills: 'items' },
-  { source: 'characters', description: 'Character profiles.', params: 'limit?', fills: 'items' },
+  {
+    source: 'characters',
+    description: 'Character profiles. itemAction controls whether a tap navigates or opens the detail sheet.',
+    params: 'limit?, itemAction? (navigate | show_detail), route? (navigate only)',
+    fills: 'items',
+  },
   { source: 'container', description: 'Resolves a container and returns its comics or jokes by content type.', params: 'containerId (required), limit?', fills: 'items' },
   { source: 'continue_reading', description: 'The signed-in user’s reading progress (empty for guests).', params: '—', fills: 'items' },
   { source: 'collection_categories', description: 'Collection category tiles.', params: '—', fills: 'items' },
@@ -44,7 +49,29 @@ export const WIDGETS: WidgetDoc[] = [
     example: {
       title: 'Free Area',
       subtitle: 'Todos los contenidos GRATIS!',
-      show_back: true,
+      showBack: true,
+    },
+  },
+  {
+    type: 'hero-image',
+    label: 'Hero Image',
+    description: 'Hero image to be used as header that renders an asset (svg)',
+    binding: 'none',
+    sources: ['static'],
+    example: {
+      asset: 'example-asset.svg',
+      aspectRatio: 1.7
+    },
+  },
+  {
+    type: 'article',
+    label: 'Article',
+    description: 'General purpose container for texts, with optional bullet points',
+    binding: 'none',
+    sources: ['static'],
+    example: {
+      body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua...',
+      bullets: [ 'bullet-1', 'bullet-2', 'bullet-3', 'bullet-4']
     },
   },
   {
@@ -94,7 +121,12 @@ export const WIDGETS: WidgetDoc[] = [
       i18n: { title: 'home.acerca_de_mi' },
       title: 'Acerca de Mí',
       emptyMessage: 'Sin personajes',
-      data_binding: { source: 'characters', limit: 10 },
+      data_binding: {
+        source: 'characters',
+        limit: 14,
+        itemAction: 'navigate',
+        route: '/personajes',
+      },
     },
   },
   {
@@ -108,7 +140,7 @@ export const WIDGETS: WidgetDoc[] = [
       title: 'PERSONAJES',
       columns: 2,
       emptyMessage: 'Sin personajes disponibles',
-      data_binding: { source: 'characters' },
+      data_binding: { source: 'characters', itemAction: 'show_detail' },
     },
   },
   {
@@ -197,7 +229,12 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Simple title/subtitle header.',
     binding: 'none',
     sources: [],
-    example: { i18n: { title: 'colecciones.titulo' }, title: 'COLECCIONES' },
+    example: {
+      i18n: {
+        title: 'colecciones.titulo'
+      },
+      title: 'COLECCIONES'
+    },
   },
   {
     type: 'detail-header',
