@@ -12,10 +12,14 @@ export type WidgetSchema = {
   default?: unknown;
   enum?: Array<string | number>;
   minLength?: number;
+  minimum?: number;
+  exclusiveMinimum?: number;
   properties?: Record<string, WidgetSchema>;
   required?: string[];
   items?: WidgetSchema;
   additionalProperties?: boolean;
+  /** Optional generated-form control override for a schema primitive. */
+  'x-control'?: 'textarea';
   /** Marks literal string fields that can be overridden through config.i18n. */
   'x-translatable'?: boolean;
 };
@@ -93,6 +97,79 @@ const SUB_HEADER_SCHEMA: WidgetSchema = {
       description: 'Displays a back control on the left side.',
       default: true,
     },
+    backgroundColor: {
+      type: 'string',
+      title: 'Background color',
+      description: 'Optional card background color, for example #FFDD00.',
+    },
+    characterAsset: {
+      type: 'string',
+      title: 'Right-side character asset',
+      description: 'Optional bundled character artwork key displayed on the right.',
+    },
+    showBell: {
+      type: 'boolean',
+      title: 'Show notification bell',
+      description: 'Displays the subscription bell instead of character artwork.',
+    },
+    tone: {
+      type: 'string',
+      title: 'Text tone',
+      description: 'Select on-light when using a light card background.',
+      enum: ['on-dark', 'on-light'],
+    },
+    embedded: {
+      type: 'boolean',
+      title: 'Embedded spacing',
+      description: 'Adds the category-detail top spacing without safe-area padding.',
+    },
+  },
+};
+
+const HERO_IMAGE_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['asset'],
+  properties: {
+    asset: {
+      type: 'string',
+      title: 'Asset',
+      description: 'Bundled hero asset key rendered by the mobile app.',
+      default: 'example-asset.svg',
+      minLength: 1,
+    },
+    aspectRatio: {
+      type: 'number',
+      title: 'Aspect ratio',
+      description: 'Image width divided by height.',
+      default: 345 / 231,
+      exclusiveMinimum: 0,
+    },
+  },
+};
+
+const ARTICLE_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  properties: {
+    body: {
+      type: 'string',
+      title: 'Body',
+      description: 'Main article text.',
+      default: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua...',
+      'x-control': 'textarea',
+      'x-translatable': true,
+    },
+    bullets: {
+      type: 'array',
+      title: 'Bullets',
+      description: 'Optional bullet points displayed after the body.',
+      default: ['bullet-1', 'bullet-2', 'bullet-3', 'bullet-4'],
+      items: {
+        type: 'string',
+        title: 'Bullet',
+      },
+    },
   },
 };
 
@@ -116,7 +193,7 @@ export const WIDGETS: WidgetDoc[] = [
   {
     type: 'sub-header',
     label: 'Sub Header',
-    description: 'Sub Header widget that holds the title (plus optional subtitle) of the screen plus an optional go back icon on the left',
+    description: 'Adaptive title/subtitle header with optional back button, card background and right-side accessory.',
     binding: 'none',
     sources: ['static'],
     schema: SUB_HEADER_SCHEMA,
@@ -125,13 +202,11 @@ export const WIDGETS: WidgetDoc[] = [
   {
     type: 'hero-image',
     label: 'Hero Image',
-    description: 'Hero image to be used as header that renders an asset (svg)',
+    description: 'Hero image used as a header that renders a bundled asset',
     binding: 'none',
     sources: ['static'],
-    example: {
-      asset: 'example-asset.svg',
-      aspectRatio: 1.7
-    },
+    schema: HERO_IMAGE_SCHEMA,
+    example: defaultsFromSchema(HERO_IMAGE_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'article',
@@ -139,10 +214,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'General purpose container for texts, with optional bullet points',
     binding: 'none',
     sources: ['static'],
-    example: {
-      body: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua...',
-      bullets: [ 'bullet-1', 'bullet-2', 'bullet-3', 'bullet-4']
-    },
+    schema: ARTICLE_SCHEMA,
+    example: defaultsFromSchema(ARTICLE_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'comic-carousel',
@@ -308,17 +381,12 @@ export const WIDGETS: WidgetDoc[] = [
   },
   {
     type: 'detail-header',
-    label: 'Detail header',
-    description: 'Header with back/bell, background color and optional character art.',
+    label: 'Detail header (legacy)',
+    description: 'Legacy alias for Sub Header. Existing sections remain editable.',
     binding: 'none',
-    sources: [],
-    example: {
-      title: 'RESULTADOS',
-      backgroundColor: '#FFDD00',
-      showBack: true,
-      showBell: true,
-      tone: 'on-light',
-    },
+    sources: ['static'],
+    schema: SUB_HEADER_SCHEMA,
+    example: defaultsFromSchema(SUB_HEADER_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'search-bar',

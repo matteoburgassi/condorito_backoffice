@@ -26,12 +26,35 @@ export function setValueAtPath(
 ): SchemaFormValue {
   if (path.length === 0) return asRecord(value);
   const [key, ...rest] = path;
+  if (rest.length === 0 && value === undefined) {
+    const next = { ...source };
+    delete next[key];
+    return next;
+  }
   return {
     ...source,
     [key]: rest.length === 0
       ? value
       : setValueAtPath(asRecord(source[key]), rest, value),
   };
+}
+
+export function parseNumberInput(value: string): number | string {
+  if (value === '') return '';
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : value;
+}
+
+export function addArrayItem<T>(items: T[], value: T): T[] {
+  return [...items, value];
+}
+
+export function updateArrayItem<T>(items: T[], index: number, value: T): T[] {
+  return items.map((item, itemIndex) => itemIndex === index ? value : item);
+}
+
+export function removeArrayItem<T>(items: T[], index: number): T[] {
+  return items.filter((_, itemIndex) => itemIndex !== index);
 }
 
 function Field({
@@ -82,6 +105,59 @@ function Field({
   }
 
   if (schema.type === 'string') {
+    if (schema.enum?.length) {
+      return (
+        <div className="field">
+          <label htmlFor={id}>
+            {label}
+            {required && <span style={{ color: 'var(--primary)' }}> *</span>}
+          </label>
+          <select
+            id={id}
+            value={typeof value === 'string' ? value : ''}
+            onChange={(event) => onChange(
+              path,
+              event.target.value === '' ? undefined : event.target.value,
+            )}
+            aria-invalid={!!error}
+          >
+            {!required && <option value="">Default</option>}
+            {schema.enum.map((option) => (
+              <option key={String(option)} value={String(option)}>{option}</option>
+            ))}
+          </select>
+          {error
+            ? <div className="field-hint" style={{ color: 'var(--error)' }}>{error}</div>
+            : schema.description && <div className="field-hint">{schema.description}</div>}
+        </div>
+      );
+    }
+
+    const inputProps = {
+      id,
+      value: typeof value === 'string' ? value : '',
+      onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+        onChange(path, event.target.value),
+      'aria-invalid': !!error,
+    };
+
+    return (
+      <div className="field">
+        <label htmlFor={id}>
+          {label}
+          {required && <span style={{ color: 'var(--primary)' }}> *</span>}
+        </label>
+        {schema['x-control'] === 'textarea'
+          ? <textarea {...inputProps} rows={6} />
+          : <input {...inputProps} />}
+        {error
+          ? <div className="field-hint" style={{ color: 'var(--error)' }}>{error}</div>
+          : schema.description && <div className="field-hint">{schema.description}</div>}
+      </div>
+    );
+  }
+
+  if (schema.type === 'number') {
     return (
       <div className="field">
         <label htmlFor={id}>
@@ -90,8 +166,10 @@ function Field({
         </label>
         <input
           id={id}
-          value={typeof value === 'string' ? value : ''}
-          onChange={(event) => onChange(path, event.target.value)}
+          type="number"
+          step="any"
+          value={typeof value === 'number' || typeof value === 'string' ? value : ''}
+          onChange={(event) => onChange(path, parseNumberInput(event.target.value))}
           aria-invalid={!!error}
         />
         {error
@@ -112,6 +190,65 @@ function Field({
         {error
           ? <div className="field-hint" style={{ color: 'var(--error)' }}>{error}</div>
           : schema.description && <div className="field-hint">{schema.description}</div>}
+      </div>
+    );
+  }
+
+  if (schema.type === 'array' && schema.items?.type === 'string') {
+    const items = Array.isArray(value)
+      ? value.map((item) => typeof item === 'string' ? item : String(item ?? ''))
+      : [];
+    const newItemDefault = typeof schema.items.default === 'string'
+      ? schema.items.default
+      : '';
+
+    return (
+      <div className="field">
+        <label>
+          {label}
+          {required && <span style={{ color: 'var(--primary)' }}> *</span>}
+        </label>
+        {schema.description && !error && <div className="field-hint">{schema.description}</div>}
+        {error && <div className="field-hint" style={{ color: 'var(--error)' }}>{error}</div>}
+        <div style={{ display: 'grid', gap: 8, marginTop: 8 }}>
+          {items.map((item, index) => {
+            const itemError = errors[`${fieldPath}.${index}`];
+            return (
+              <div key={index}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    aria-label={`${schema.items?.title ?? 'Item'} ${index + 1}`}
+                    value={item}
+                    onChange={(event) => onChange(
+                      path,
+                      updateArrayItem(items, index, event.target.value),
+                    )}
+                    aria-invalid={!!itemError}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => onChange(path, removeArrayItem(items, index))}
+                  >
+                    Remove
+                  </button>
+                </div>
+                {itemError && (
+                  <div className="field-hint" style={{ color: 'var(--error)' }}>{itemError}</div>
+                )}
+              </div>
+            );
+          })}
+          <div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => onChange(path, addArrayItem(items, newItemDefault))}
+            >
+              Add {schema.items.title ?? 'item'}
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
