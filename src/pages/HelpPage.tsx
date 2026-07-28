@@ -114,6 +114,32 @@ export function HelpPage() {
       </div>
 
       <div className="doc-section">
+        <h2>Comic carousel behavior</h2>
+        <p>
+          The generated Comic Carousel form configures both presentation and live content.
+          The <Code>default</Code> and <Code>continue-reading</Code> variants render horizontal rails;
+          <Code>hero</Code> renders only the first resolved item at full content width.
+        </p>
+        <div className="card doc-card">
+          <p style={{ marginBottom: 4 }}>
+            <strong>Catalogue comics:</strong> omit <Code>containerId</Code> to use the current screen’s
+            route <Code>slug</Code>, or provide it to pin the carousel to one container.
+          </p>
+          <Json value={{ data_binding: { source: 'comics', limit: 6 } }} />
+          <p style={{ margin: '14px 0 4px' }}>
+            <strong>Fixed container:</strong> <Code>containerId</Code> is required.
+          </p>
+          <Json value={{ data_binding: { source: 'container', containerId: 'container-cms-id', limit: 6 } }} />
+          <p style={{ margin: '14px 0 4px' }}>
+            <strong>Continue reading:</strong> no source parameters are needed. When omitted from the
+            section config, the Edge Function supplies the continue-reading variant, logged-in audience,
+            cream background, stable key, and empty-message fallback.
+          </p>
+          <Json value={{ data_binding: { source: 'continue_reading' } }} />
+        </div>
+      </div>
+
+      <div className="doc-section">
         <h2>Character tap behavior</h2>
         <p>
           Character detail is an overlay opened by <Code>show_detail</Code>, not a screen section type.

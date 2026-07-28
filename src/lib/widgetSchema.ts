@@ -48,21 +48,72 @@ export function validateWidgetConfig(
   config: WidgetConfig,
 ): Record<string, string> {
   const validate = ajv.compile(schema);
-  if (validate(config)) return {};
-
   const errors: Record<string, string> = {};
-  for (const error of validate.errors ?? []) {
-    const path = errorPath(error);
-    if (!(path in errors)) errors[path] = error.message ?? 'Invalid value';
+  if (!validate(config)) {
+    for (const error of validate.errors ?? []) {
+      const path = errorPath(error);
+      if (!(path in errors)) errors[path] = error.message ?? 'Invalid value';
+    }
   }
+
+  function validateControls(currentSchema: WidgetSchema, value: unknown, path: string) {
+    if (currentSchema.type !== 'object' || value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return;
+    }
+    const record = value as WidgetConfig;
+    if (currentSchema['x-control'] === 'data-binding') {
+      if (record.source === 'container' && (
+        typeof record.containerId !== 'string' || record.containerId.trim() === ''
+      )) {
+        errors[`${path}.containerId`.replace(/^\./, '')] = 'is required for the container source';
+      }
+    }
+    if (currentSchema['x-control'] === 'action') {
+      if (record.type === 'navigate' && (
+        typeof record.route !== 'string' || record.route.trim() === ''
+      )) {
+        errors[`${path}.route`.replace(/^\./, '')] = 'is required for navigate actions';
+      }
+      if (record.type === 'open_webview' && (
+        typeof record.url !== 'string' || record.url.trim() === ''
+      )) {
+        errors[`${path}.url`.replace(/^\./, '')] = 'is required for webview actions';
+      }
+    }
+    for (const [key, property] of Object.entries(currentSchema.properties ?? {})) {
+      validateControls(property, record[key], path ? `${path}.${key}` : key);
+    }
+  }
+
+  validateControls(schema, config, '');
   return errors;
 }
 
 export function translatableProperties(schema: WidgetSchema) {
   if (schema.type !== 'object') return [];
-  return Object.entries(schema.properties ?? {})
-    .filter(([, property]) => property.type === 'string' && property['x-translatable'])
-    .map(([key, property]) => ({ key, property }));
+  const fields: Array<{ key: string; property: WidgetSchema }> = [];
+
+  function visit(current: WidgetSchema, prefix: string) {
+    for (const [key, property] of Object.entries(current.properties ?? {})) {
+      const path = prefix ? `${prefix}.${key}` : key;
+      if (property.type === 'string' && property['x-translatable']) {
+        fields.push({ key: path, property });
+      } else if (property.type === 'object') {
+        visit(property, path);
+      }
+    }
+  }
+
+  visit(schema, '');
+  return fields;
+}
+
+export function valueAtConfigPath(config: WidgetConfig, path: string): unknown {
+  return path.split('.').reduce<unknown>((value, part) => (
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as WidgetConfig)[part]
+      : undefined
+  ), config);
 }
 
 export function setTranslationKey(
