@@ -1,8 +1,9 @@
-import type { WidgetSchema } from '../lib/widgetCatalog';
+import { defaultsFromSchema, type WidgetSchema } from '../lib/widgetCatalog';
 import {
   asWidgetConfig,
   setTranslationKey,
   translatableProperties,
+  valueAtConfigPath,
 } from '../lib/widgetSchema';
 import { Switch } from './Switch';
 
@@ -57,6 +58,31 @@ export function removeArrayItem<T>(items: T[], index: number): T[] {
   return items.filter((_, itemIndex) => itemIndex !== index);
 }
 
+export function optionalObjectDefaults(schema: WidgetSchema): SchemaFormValue {
+  const result: SchemaFormValue = {};
+  for (const [key, property] of Object.entries(schema.properties ?? {})) {
+    const value = defaultsFromSchema(property);
+    if (value !== undefined) result[key] = value;
+  }
+  return result;
+}
+
+export function changeDataBindingSource(value: unknown, source: string): SchemaFormValue {
+  const next: SchemaFormValue = { ...asRecord(value), source };
+  if (source === 'continue_reading') {
+    delete next.containerId;
+    delete next.limit;
+  }
+  return next;
+}
+
+export function changeActionType(value: unknown, type: string): SchemaFormValue {
+  const next: SchemaFormValue = { ...asRecord(value), type };
+  if (type !== 'navigate' && type !== 'premium_gate') delete next.route;
+  if (type !== 'open_webview') delete next.url;
+  return next;
+}
+
 function Field({
   schema,
   path,
@@ -78,6 +104,119 @@ function Field({
   const error = errors[fieldPath];
 
   if (schema.type === 'object') {
+    if (schema['x-control'] === 'data-binding') {
+      const binding = asRecord(value);
+      const source = typeof binding.source === 'string' ? binding.source : 'comics';
+      const properties = schema.properties ?? {};
+      return (
+        <fieldset className="field">
+          <legend>{label}</legend>
+          {schema.description && <div className="field-hint">{schema.description}</div>}
+          {properties.source && (
+            <Field
+              schema={properties.source}
+              path={[...path, 'source']}
+              value={source}
+              onChange={(sourcePath, nextSource) => {
+                if (typeof nextSource === 'string') {
+                  onChange(path, changeDataBindingSource(binding, nextSource));
+                } else {
+                  onChange(sourcePath, nextSource);
+                }
+              }}
+              errors={errors}
+              required
+            />
+          )}
+          {(source === 'comics' || source === 'container') && properties.containerId && (
+            <Field
+              schema={{
+                ...properties.containerId,
+                description: source === 'container'
+                  ? 'Required fixed container identifier.'
+                  : 'Optional. Leave empty to use the current screen slug.',
+              }}
+              path={[...path, 'containerId']}
+              value={binding.containerId}
+              onChange={onChange}
+              errors={errors}
+              required={source === 'container'}
+            />
+          )}
+          {(source === 'comics' || source === 'container') && properties.limit && (
+            <Field
+              schema={properties.limit}
+              path={[...path, 'limit']}
+              value={binding.limit}
+              onChange={onChange}
+              errors={errors}
+            />
+          )}
+          {source === 'continue_reading' && (
+            <div className="field-hint">
+              Uses the signed-in user’s saved progress; no source parameters are required.
+            </div>
+          )}
+        </fieldset>
+      );
+    }
+
+    if (schema['x-control'] === 'action') {
+      const action = asRecord(value);
+      const actionType = typeof action.type === 'string' ? action.type : 'navigate';
+      const properties = schema.properties ?? {};
+      return (
+        <fieldset className="field">
+          <legend>{label}</legend>
+          {schema.description && <div className="field-hint">{schema.description}</div>}
+          {properties.type && (
+            <Field
+              schema={properties.type}
+              path={[...path, 'type']}
+              value={actionType}
+              onChange={(typePath, nextType) => {
+                if (typeof nextType === 'string') {
+                  onChange(path, changeActionType(action, nextType));
+                } else {
+                  onChange(typePath, nextType);
+                }
+              }}
+              errors={errors}
+              required
+            />
+          )}
+          {(actionType === 'navigate' || actionType === 'premium_gate') && properties.route && (
+            <Field
+              schema={{
+                ...properties.route,
+                description: actionType === 'navigate'
+                  ? 'Route opened when the header action is pressed.'
+                  : 'Optional route retained for the premium gate.',
+              }}
+              path={[...path, 'route']}
+              value={action.route}
+              onChange={onChange}
+              errors={errors}
+              required={actionType === 'navigate'}
+            />
+          )}
+          {actionType === 'open_webview' && properties.url && (
+            <Field
+              schema={{
+                ...properties.url,
+                description: 'Web address opened by the header action.',
+              }}
+              path={[...path, 'url']}
+              value={action.url}
+              onChange={onChange}
+              errors={errors}
+              required
+            />
+          )}
+        </fieldset>
+      );
+    }
+
     const content = (
       <>
         {Object.entries(schema.properties ?? {}).map(([key, childSchema]) => (
@@ -95,6 +234,23 @@ function Field({
     );
 
     if (path.length === 0) return <div>{content}</div>;
+    if (schema['x-optional']) {
+      const enabled = value !== null && typeof value === 'object' && !Array.isArray(value);
+      return (
+        <div className="field">
+          <Switch
+            checked={enabled}
+            onChange={(checked) => onChange(
+              path,
+              checked ? optionalObjectDefaults(schema) : undefined,
+            )}
+            label={`Enable ${label}`}
+          />
+          {schema.description && <div className="field-hint">{schema.description}</div>}
+          {enabled && <fieldset style={{ marginTop: 8 }}>{content}</fieldset>}
+        </div>
+      );
+    }
     return (
       <fieldset className="field">
         <legend>{label}</legend>
@@ -292,7 +448,12 @@ export function WidgetTranslationFields({
   value: SchemaFormValue;
   onChange: (value: SchemaFormValue) => void;
 }) {
-  const fields = translatableProperties(schema);
+  const fields = translatableProperties(schema).filter(({ key }) => {
+    const parentPath = key.split('.').slice(0, -1).join('.');
+    if (!parentPath) return true;
+    const parent = valueAtConfigPath(value, parentPath);
+    return parent !== null && typeof parent === 'object' && !Array.isArray(parent);
+  });
   if (fields.length === 0) return null;
 
   const i18n = asWidgetConfig(value.i18n);
@@ -304,7 +465,8 @@ export function WidgetTranslationFields({
         {fields.map(({ key, property }) => {
           const enabled = Object.prototype.hasOwnProperty.call(i18n, key);
           const translationKey = typeof i18n[key] === 'string' ? i18n[key] : '';
-          const fallback = typeof value[key] === 'string' ? value[key] : '';
+          const rawFallback = valueAtConfigPath(value, key);
+          const fallback = typeof rawFallback === 'string' ? rawFallback : '';
 
           return (
             <div key={key} style={{ marginBottom: 14 }}>

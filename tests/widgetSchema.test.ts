@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
   addArrayItem,
+  changeActionType,
+  changeDataBindingSource,
+  optionalObjectDefaults,
   parseNumberInput,
   removeArrayItem,
   setValueAtPath,
   updateArrayItem,
 } from '../src/components/WidgetSchemaForm';
 import {
+  BANNER_PRESETS,
   WIDGETS,
   defaultConfigForWidget,
   defaultsFromSchema,
@@ -17,8 +21,11 @@ import {
   parseWidgetConfigJson,
   setTranslationKey,
   stringifyWidgetConfig,
+  translatableProperties,
   validateWidgetConfig,
+  valueAtConfigPath,
 } from '../src/lib/widgetSchema';
+import { CATEGORY_ASSET_OPTIONS, RESOURCES } from '../src/lib/resources';
 
 const subHeader = WIDGETS.find((widget) => widget.type === 'sub-header');
 if (!subHeader?.schema) throw new Error('Sub-header schema is required for these tests.');
@@ -26,6 +33,8 @@ const heroImage = WIDGETS.find((widget) => widget.type === 'hero-image');
 if (!heroImage?.schema) throw new Error('Hero-image schema is required for these tests.');
 const article = WIDGETS.find((widget) => widget.type === 'article');
 if (!article?.schema) throw new Error('Article schema is required for these tests.');
+const comicCarousel = WIDGETS.find((widget) => widget.type === 'comic-carousel');
+if (!comicCarousel?.schema) throw new Error('Comic-carousel schema is required for these tests.');
 
 describe('sub-header schema form helpers', () => {
   it('recursively creates the starter configuration from schema defaults', () => {
@@ -126,6 +135,21 @@ describe('sub-header schema form helpers', () => {
   });
 });
 
+describe('category asset configuration', () => {
+  it('offers the bundled category assets in resources and sub-header forms', () => {
+    const categoryResource = RESOURCES.find((resource) => resource.key === 'collection-categories');
+    const assetField = categoryResource?.fields.find((field) => field.name === 'character_asset');
+    const assetKeys = CATEGORY_ASSET_OPTIONS.map((option) => option.value);
+    const subHeaderAsset = subHeader.schema.properties?.characterAsset;
+
+    expect(assetField).toMatchObject({
+      type: 'select',
+      options: CATEGORY_ASSET_OPTIONS,
+    });
+    expect(subHeaderAsset?.enum).toEqual(expect.arrayContaining(assetKeys));
+  });
+});
+
 describe('hero-image schema form', () => {
   it('creates defaults for the asset and aspect ratio', () => {
     expect(defaultConfigForWidget(heroImage)).toEqual({
@@ -201,5 +225,153 @@ describe('article schema form', () => {
       body: 'Article',
       bullets: ['one', 2],
     })).toHaveProperty('bullets.1');
+  });
+});
+
+describe('comic-carousel schema form', () => {
+  it('creates a live comics starter without optional overrides', () => {
+    expect(defaultConfigForWidget(comicCarousel)).toEqual({
+      title: 'Comics',
+      emptyMessage: 'Sin comics disponibles',
+      variant: 'default',
+      data_binding: { source: 'comics', limit: 6 },
+    });
+  });
+
+  it('validates variants, audiences, and positive card dimensions', () => {
+    const defaults = defaultConfigForWidget(comicCarousel);
+    expect(validateWidgetConfig(comicCarousel.schema, {
+      ...defaults,
+      variant: 'hero',
+      audience: 'logged_in',
+      cardWidth: 200,
+      cardHeight: 280,
+    })).toEqual({});
+    expect(validateWidgetConfig(comicCarousel.schema, {
+      ...defaults,
+      variant: 'unknown',
+      audience: 'members',
+      cardWidth: 0,
+    })).toMatchObject({
+      variant: expect.any(String),
+      audience: expect.any(String),
+      cardWidth: expect.any(String),
+    });
+  });
+
+  it('enforces source-specific binding fields', () => {
+    const defaults = defaultConfigForWidget(comicCarousel);
+    expect(validateWidgetConfig(comicCarousel.schema, {
+      ...defaults,
+      data_binding: { source: 'container', limit: 6 },
+    })).toHaveProperty('data_binding.containerId');
+    expect(validateWidgetConfig(comicCarousel.schema, {
+      ...defaults,
+      data_binding: { source: 'container', containerId: 'series-condorito' },
+    })).toEqual({});
+    expect(validateWidgetConfig(comicCarousel.schema, {
+      ...defaults,
+      data_binding: { source: 'continue_reading' },
+    })).toEqual({});
+  });
+
+  it('changes binding sources without dropping unknown fields', () => {
+    const current = {
+      source: 'comics',
+      limit: 8,
+      containerId: 'old',
+      custom: 'preserved',
+    };
+    expect(changeDataBindingSource(current, 'continue_reading')).toEqual({
+      source: 'continue_reading',
+      custom: 'preserved',
+    });
+    expect(changeDataBindingSource(current, 'container')).toEqual({
+      ...current,
+      source: 'container',
+    });
+  });
+
+  it('enables an optional header action with valid defaults', () => {
+    const headerActionSchema = comicCarousel.schema.properties?.headerAction;
+    if (!headerActionSchema) throw new Error('Header action schema is required.');
+
+    const headerAction = optionalObjectDefaults(headerActionSchema);
+    expect(headerAction).toEqual({
+      label: 'Ver todo',
+      action: { type: 'navigate', route: '/colecciones' },
+    });
+    expect(validateWidgetConfig(comicCarousel.schema, {
+      ...defaultConfigForWidget(comicCarousel),
+      headerAction,
+    })).toEqual({});
+  });
+
+  it('keeps the existing continue-reading preset schema-valid', () => {
+    expect(validateWidgetConfig(
+      comicCarousel.schema,
+      BANNER_PRESETS.continue_reading.config,
+    )).toEqual({});
+  });
+
+  it('shows only fields relevant to the selected action and validates them', () => {
+    expect(changeActionType(
+      { type: 'navigate', route: '/colecciones', custom: true },
+      'open_webview',
+    )).toEqual({ type: 'open_webview', custom: true });
+
+    const defaults = defaultConfigForWidget(comicCarousel);
+    expect(validateWidgetConfig(comicCarousel.schema, {
+      ...defaults,
+      headerAction: {
+        label: 'Open',
+        action: { type: 'navigate' },
+      },
+    })).toHaveProperty('headerAction.action.route');
+    expect(validateWidgetConfig(comicCarousel.schema, {
+      ...defaults,
+      headerAction: {
+        label: 'Open',
+        action: { type: 'open_webview' },
+      },
+    })).toHaveProperty('headerAction.action.url');
+  });
+
+  it('serializes top-level and nested translation keys', () => {
+    const headerActionSchema = comicCarousel.schema.properties?.headerAction;
+    if (!headerActionSchema) throw new Error('Header action schema is required.');
+    const withAction = {
+      ...defaultConfigForWidget(comicCarousel),
+      headerAction: optionalObjectDefaults(headerActionSchema),
+    };
+    const translated = setTranslationKey(
+      setTranslationKey(withAction, 'title', 'home.comics'),
+      'headerAction.label',
+      'home.ver_todo',
+    );
+
+    expect(translatableProperties(comicCarousel.schema).map(({ key }) => key)).toEqual([
+      'title',
+      'emptyMessage',
+      'headerAction.label',
+    ]);
+    expect(valueAtConfigPath(translated, 'headerAction.label')).toBe('Ver todo');
+    expect(normalizeTranslations(translated)).toMatchObject({
+      i18n: {
+        title: 'home.comics',
+        'headerAction.label': 'home.ver_todo',
+      },
+    });
+  });
+
+  it('round-trips advanced carousel JSON with custom fields', () => {
+    const original = {
+      ...defaultConfigForWidget(comicCarousel),
+      custom: { layoutExperiment: true },
+      data_binding: { source: 'comics', limit: 12, customParam: 'keep' },
+    };
+    expect(parseWidgetConfigJson(stringifyWidgetConfig(original))).toEqual({
+      config: original,
+    });
   });
 });

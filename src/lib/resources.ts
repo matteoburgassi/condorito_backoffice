@@ -27,6 +27,15 @@ export type Resource = {
   listColumns: string[];
 };
 
+export const CATEGORY_ASSET_OPTIONS = [
+  { value: 'colecciones-serie-regular', label: 'Serie Regular' },
+  { value: 'colecciones-condorito-gigante', label: 'Condorito Gigante' },
+  { value: 'colecciones-ediciones-especiales', label: 'Ediciones Especiales' },
+  { value: 'colecciones-clasicos-de-pepo', label: 'Clásicos de Pepo' },
+  { value: 'colecciones-chistes', label: 'Chistes' },
+  { value: 'colecciones-tira-del-dia', label: 'Tira del Día' },
+] satisfies NonNullable<Field['options']>;
+
 export const RESOURCES: Resource[] = [
   // ---- Content ----
   {
@@ -161,7 +170,13 @@ export const RESOURCES: Resource[] = [
       { name: 'title', label: 'Title', type: 'text', required: true },
       { name: 'subtitle', label: 'Subtitle', type: 'text' },
       { name: 'background_color', label: 'Background color', type: 'text', hint: 'Hex or token, e.g. #E63329' },
-      { name: 'character_asset', label: 'Character asset', type: 'text' },
+      {
+        name: 'character_asset',
+        label: 'Category artwork',
+        type: 'select',
+        options: CATEGORY_ASSET_OPTIONS,
+        hint: 'Bundled SVG shown on the category card and its detail header.',
+      },
       { name: 'cms_id', label: 'CMS ID', type: 'text', hint: 'Catalog CMS id. Used as the detail route param and the comics container_id.' },
       { name: 'action_route', label: 'Action route', type: 'text' },
       { name: 'sort_order', label: 'Sort order', type: 'number' },
