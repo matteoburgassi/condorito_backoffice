@@ -8,6 +8,8 @@ import { DashboardHome } from './pages/DashboardHome';
 import { ResourcePage } from './pages/ResourcePage';
 import { ScreensPage } from './pages/ScreensPage';
 import { HelpPage } from './pages/HelpPage';
+import { NotificationsPage } from './pages/NotificationsPage';
+import { NotificationListenerPage } from './pages/NotificationListenerPage';
 import { Spinner } from './components/Spinner';
 
 function Gate() {
@@ -31,6 +33,8 @@ function Gate() {
           <Route index element={<DashboardHome />} />
           <Route path="screens" element={<ScreensPage />} />
           <Route path="help" element={<HelpPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="notification-listener" element={<NotificationListenerPage />} />
           <Route path="r/:key" element={<ResourcePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

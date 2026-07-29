@@ -241,6 +241,11 @@ tbody tr:hover { background: var(--surface-2); }
 .doc-head-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .doc-head-row .doc-inline { font-weight: 600; }
 
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .overlay-mask { display: none; }
 .burger { display: none; }
 @media (max-width: 820px) {
