@@ -49,6 +49,14 @@ function sectionTitle(config: unknown): string | null {
   return typeof title === 'string' && title.trim() ? title.trim() : null;
 }
 
+function sectionTitleKey(config: unknown): string | null {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
+  const i18n = (config as Record<string, unknown>).i18n;
+  if (!i18n || typeof i18n !== 'object' || Array.isArray(i18n)) return null;
+  const key = (i18n as Record<string, unknown>).title;
+  return typeof key === 'string' && key.trim() ? key.trim() : null;
+}
+
 export function ScreensPage() {
   const { productId, current } = useProduct();
   const [screens, setScreens] = useState<Screen[]>([]);
@@ -64,6 +72,7 @@ export function ScreensPage() {
   const [deleteSection, setDeleteSection] = useState<Section | null>(null);
   const [busy, setBusy] = useState(false);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [i18nTitles, setI18nTitles] = useState<Record<string, string>>({});
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -109,6 +118,51 @@ export function ScreensPage() {
     if (selectedId) loadSections(selectedId);
     else setSections([]);
   }, [selectedId, loadSections]);
+
+  useEffect(() => {
+    const fullKeys = Array.from(new Set(
+      sections.map((s) => sectionTitleKey(s.config)).filter((k): k is string => k !== null),
+    ));
+    if (fullKeys.length === 0 || !productId) {
+      setI18nTitles({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const bareKeys = fullKeys.map((k) => (k.includes('.') ? k.slice(k.indexOf('.') + 1) : k));
+      const [langsRes, rowsRes] = await Promise.all([
+        supabase
+          .from('product_languages')
+          .select('code, is_default')
+          .eq('product_id', productId),
+        supabase
+          .from('product_translations')
+          .select('language_code, namespace, key, value')
+          .eq('product_id', productId)
+          .in('key', Array.from(new Set([...bareKeys, ...fullKeys]))),
+      ]);
+      if (cancelled || rowsRes.error || !rowsRes.data) return;
+      const langs = langsRes.data ?? [];
+      const defaultLang = langs.find((l) => l.is_default)?.code ?? langs[0]?.code ?? null;
+      const rows = rowsRes.data as Array<{ language_code: string; namespace: string; key: string; value: string }>;
+
+      const map: Record<string, string> = {};
+      for (const full of fullKeys) {
+        const dot = full.indexOf('.');
+        const ns = dot > 0 ? full.slice(0, dot) : null;
+        const bare = dot > 0 ? full.slice(dot + 1) : full;
+        let candidates = ns ? rows.filter((r) => r.namespace === ns && r.key === bare) : [];
+        if (candidates.length === 0) candidates = rows.filter((r) => r.key === full);
+        if (candidates.length === 0) candidates = rows.filter((r) => r.key === bare);
+        const match = candidates.find((r) => r.language_code === defaultLang) ?? candidates[0];
+        if (match && typeof match.value === 'string' && match.value.trim()) map[full] = match.value.trim();
+      }
+      setI18nTitles(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sections, productId]);
 
   const selected = screens.find((s) => s.id === selectedId) ?? null;
 
@@ -416,11 +470,15 @@ export function ScreensPage() {
                           <div className="section-type">
                             <span style={{ color: 'var(--text-faint)', marginRight: 8 }}>{i + 1}.</span>
                             {sec.type || <span style={{ color: 'var(--text-faint)' }}>untyped</span>}
-                            {sectionTitle(sec.config) && (
-                              <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 8 }}>
-                                · {sectionTitle(sec.config)}
-                              </span>
-                            )}
+                            {(() => {
+                              const key = sectionTitleKey(sec.config);
+                              const display = (key && i18nTitles[key]) || sectionTitle(sec.config);
+                              return display ? (
+                                <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 8 }}>
+                                  · {display}
+                                </span>
+                              ) : null;
+                            })()}
                           </div>
                           <div className="section-cfg">{JSON.stringify(sec.config)}</div>
                         </div>
