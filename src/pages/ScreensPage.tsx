@@ -43,6 +43,12 @@ type Section = {
   is_active: boolean;
 };
 
+function sectionTitle(config: unknown): string | null {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
+  const title = (config as Record<string, unknown>).title;
+  return typeof title === 'string' && title.trim() ? title.trim() : null;
+}
+
 export function ScreensPage() {
   const { productId, current } = useProduct();
   const [screens, setScreens] = useState<Screen[]>([]);
@@ -410,6 +416,11 @@ export function ScreensPage() {
                           <div className="section-type">
                             <span style={{ color: 'var(--text-faint)', marginRight: 8 }}>{i + 1}.</span>
                             {sec.type || <span style={{ color: 'var(--text-faint)' }}>untyped</span>}
+                            {sectionTitle(sec.config) && (
+                              <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 8 }}>
+                                · {sectionTitle(sec.config)}
+                              </span>
+                            )}
                           </div>
                           <div className="section-cfg">{JSON.stringify(sec.config)}</div>
                         </div>
