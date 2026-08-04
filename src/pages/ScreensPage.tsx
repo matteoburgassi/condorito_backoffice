@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Plus,
   Pencil,
+  Copy,
   Trash2,
   ChevronUp,
   ChevronDown,
@@ -56,6 +57,7 @@ export function ScreensPage() {
   const [deleteScreen, setDeleteScreen] = useState<Screen | null>(null);
   const [deleteSection, setDeleteSection] = useState<Section | null>(null);
   const [busy, setBusy] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
 
@@ -205,6 +207,52 @@ export function ScreensPage() {
       setError(error.message);
       loadSections(selectedId);
     }
+  };
+
+  const duplicateSection = async (section: Section, index: number) => {
+    if (!selectedId || duplicatingId) return;
+    setError(null);
+    setDuplicatingId(section.id);
+
+    const tempPos = sections.reduce((m, s) => Math.max(m, s.position), -1) + 1;
+    const { data, error } = await supabase
+      .from('product_screen_sections')
+      .insert({
+        screen_id: selectedId,
+        type: section.type,
+        config: section.config,
+        position: tempPos,
+        is_active: false,
+      })
+      .select('id')
+      .maybeSingle();
+    if (error || !data) {
+      setDuplicatingId(null);
+      setError(error?.message ?? 'Could not duplicate the section.');
+      return;
+    }
+
+    const copy: Section = { ...section, id: data.id, position: tempPos, is_active: false };
+    const reordered = [...sections];
+    reordered.splice(index + 1, 0, copy);
+    const withPos = reordered.map((s, i) => ({ ...s, position: i }));
+
+    const stored = new Map(sections.map((s) => [s.id, s.position]));
+    stored.set(copy.id, tempPos);
+    for (const s of withPos) {
+      if (stored.get(s.id) === s.position) continue;
+      const { error: e } = await supabase
+        .from('product_screen_sections')
+        .update({ position: s.position })
+        .eq('id', s.id);
+      if (e) {
+        setError(e.message);
+        break;
+      }
+    }
+
+    setDuplicatingId(null);
+    await loadSections(selectedId);
   };
 
   const move = async (index: number, dir: -1 | 1) => {
@@ -368,6 +416,15 @@ export function ScreensPage() {
                         <Switch checked={sec.is_active} onChange={() => toggleSection(sec)} />
                         <button className="btn-icon" title="Edit" onClick={() => { setError(null); setSectionModal({ record: sec }); }}>
                           <Pencil size={15} />
+                        </button>
+                        <button
+                          className="btn-icon"
+                          title="Duplicate"
+                          disabled={duplicatingId !== null}
+                          style={{ opacity: duplicatingId === sec.id ? 0.5 : undefined }}
+                          onClick={() => duplicateSection(sec, i)}
+                        >
+                          <Copy size={15} />
                         </button>
                         <button className="btn-icon" title="Delete" onClick={() => setDeleteSection(sec)}>
                           <Trash2 size={15} />
