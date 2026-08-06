@@ -111,6 +111,19 @@ export function RecordForm({
 
             {f.type === 'boolean' ? (
               <Switch checked={!!val} onChange={(v) => set(f.name, v)} label={f.label} />
+            ) : f.type === 'select' ? (
+              <select
+                id={f.name}
+                value={(val as string) ?? ''}
+                onChange={(e) => set(f.name, e.target.value)}
+              >
+                <option value="">None</option>
+                {(f.options ?? []).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             ) : f.type === 'textarea' || f.type === 'json' ? (
               <textarea
                 id={f.name}
