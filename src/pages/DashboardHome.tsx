@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, MonitorSmartphone } from 'lucide-react';
+import { ArrowRight, MonitorSmartphone, FileText } from 'lucide-react';
 import { VISIBLE_RESOURCES, VISIBLE_GROUPS } from '../lib/resources';
 import { ResourceIcon } from '../components/ResourceIcon';
 import { supabase } from '../lib/supabase';
@@ -11,6 +11,7 @@ const STAT_TABLES: { table: string; label: string; scoped: boolean }[] = [
   { table: 'product_feature_flags', label: 'Feature flags', scoped: true },
   { table: 'product_menu_items', label: 'Menu items', scoped: true },
   { table: 'product_screens', label: 'Screens', scoped: true },
+  { table: 'product_documents', label: 'Documents', scoped: true },
 ];
 
 export function DashboardHome() {
@@ -60,13 +61,24 @@ export function DashboardHome() {
         ))}
       </div>
 
-      <Link to="/screens" className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, marginBottom: 28 }}>
+      <Link to="/screens" className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, marginBottom: 14 }}>
         <div className="brand-mark" style={{ background: 'var(--surface-3)', color: 'var(--accent)' }}>
           <MonitorSmartphone size={18} />
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 600 }}>App Screens</div>
           <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Compose data-driven layouts by reordering and editing sections.</div>
+        </div>
+        <ArrowRight size={18} style={{ color: 'var(--text-muted)' }} />
+      </Link>
+
+      <Link to="/documents" className="card" style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, marginBottom: 28 }}>
+        <div className="brand-mark" style={{ background: 'var(--surface-3)', color: 'var(--accent)' }}>
+          <FileText size={18} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontWeight: 600 }}>Documents</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Edit terms, privacy, and other legal HTML shown in the app.</div>
         </div>
         <ArrowRight size={18} style={{ color: 'var(--text-muted)' }} />
       </Link>
