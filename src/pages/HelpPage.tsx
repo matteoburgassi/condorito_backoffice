@@ -31,10 +31,17 @@ export function HelpPage() {
             <Code>get-product-config</Code>. Everything is scoped to the <strong>Product</strong> selected in the
             top bar. Running apps cache config for ~10 minutes, so changes appear within that window.
           </p>
-          <p style={{ margin: 0 }}>
+          <p style={{ marginBottom: 6 }}>
             <strong>Screens</strong> are served by <Code>condorito-screen</Code>. A screen only replaces the app’s
             built-in layout when the screen <em>and</em> at least one section are <strong>Active</strong>; otherwise
             the app falls back to its default layout. Screen changes are not cached and appear on the next load.
+          </p>
+          <p style={{ margin: 0 }}>
+            <strong>Documents</strong> (terms, privacy, …) are edited under <strong>Documents</strong> and loaded by{' '}
+            <Code>get-product-document</Code>. Open them in the app via{' '}
+            <Code>/document?slug=cgu</Code> (or <Code>privacy-policy</Code>, etc.). The WYSIWYG keeps headings,
+            paragraphs, lists, plus bold / italic / underline; paste from Word/Docs is sanitized to those.
+            Document bodies are cached on the client for ~10 minutes.
           </p>
         </div>
       </div>

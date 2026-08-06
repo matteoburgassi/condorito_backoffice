@@ -6,9 +6,11 @@ type Props = {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
+  /** Wider modal for editors (e.g. document body). */
+  wide?: boolean;
 };
 
-export function Modal({ title, onClose, children, footer }: Props) {
+export function Modal({ title, onClose, children, footer, wide }: Props) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -19,7 +21,7 @@ export function Modal({ title, onClose, children, footer }: Props) {
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className={`modal${wide ? ' modal-wide' : ''}`} onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <span className="modal-title">{title}</span>
           <button className="btn-icon" onClick={onClose} aria-label="Close">
