@@ -66,7 +66,7 @@ export function HelpPage() {
           <p style={{ margin: '14px 0 4px' }}>
             <Code>data_binding</Code> — fill dynamic content from a data source (see below).
           </p>
-          <Json value={{ data_binding: { source: 'characters', limit: 10 } }} />
+          <Json value={{ data_binding: { source: 'characters', limit: 10, itemAction: 'navigate', route: '/personajes' } }} />
         </div>
         <p style={{ marginTop: 14 }}>
           <strong>Audience</strong> — limit who sees a section (filtered by the app):
@@ -121,6 +121,46 @@ export function HelpPage() {
       </div>
 
       <div className="doc-section">
+        <h2>Comic carousel behavior</h2>
+        <p>
+          The generated Comic Carousel form configures both presentation and live content.
+          The <Code>default</Code> and <Code>continue-reading</Code> variants render horizontal rails;
+          <Code>hero</Code> renders only the first resolved item at full content width.
+        </p>
+        <div className="card doc-card">
+          <p style={{ marginBottom: 4 }}>
+            <strong>Catalogue comics:</strong> omit <Code>containerId</Code> to use the current screen’s
+            route <Code>slug</Code>, or provide it to pin the carousel to one container.
+          </p>
+          <Json value={{ data_binding: { source: 'comics', limit: 6 } }} />
+          <p style={{ margin: '14px 0 4px' }}>
+            <strong>Fixed container:</strong> <Code>containerId</Code> is required.
+          </p>
+          <Json value={{ data_binding: { source: 'container', containerId: 'container-cms-id', limit: 6 } }} />
+          <p style={{ margin: '14px 0 4px' }}>
+            <strong>Continue reading:</strong> no source parameters are needed. When omitted from the
+            section config, the Edge Function supplies the continue-reading variant, logged-in audience,
+            cream background, stable key, and empty-message fallback.
+          </p>
+          <Json value={{ data_binding: { source: 'continue_reading' } }} />
+        </div>
+      </div>
+
+      <div className="doc-section">
+        <h2>Character tap behavior</h2>
+        <p>
+          Character detail is an overlay opened by <Code>show_detail</Code>, not a screen section type.
+          Configure the action on each character-bound section so the same avatar widget can behave differently by screen.
+        </p>
+        <div className="card doc-card">
+          <p style={{ marginBottom: 4 }}><strong>Home:</strong> navigate to the Personajes screen.</p>
+          <Json value={{ data_binding: { source: 'characters', limit: 14, itemAction: 'navigate', route: '/personajes' } }} />
+          <p style={{ margin: '14px 0 4px' }}><strong>Personajes:</strong> open the selected character’s detail sheet.</p>
+          <Json value={{ data_binding: { source: 'characters', itemAction: 'show_detail' } }} />
+        </div>
+      </div>
+
+      <div className="doc-section">
         <h2>Widget reference</h2>
         <p>Set a section’s type to one of these and use the example as a starting config.</p>
         {WIDGETS.map((w) => (
@@ -160,7 +200,15 @@ export function HelpPage() {
               open_reader: { type: 'open_reader', data: { pdfUrl: 'https://…', title: 'Título' } },
               premium_gate: { type: 'premium_gate' },
               show_subscription: { type: 'show_subscription' },
-              show_detail: { type: 'show_detail', data: { name: '…' } },
+              show_detail: {
+                type: 'show_detail',
+                data: {
+                  slug: 'condorito',
+                  name: 'Condorito',
+                  bio: '…',
+                  imageUrl: 'https://…',
+                },
+              },
               go_back: { type: 'go_back' },
             }}
           />
