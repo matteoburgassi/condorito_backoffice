@@ -57,6 +57,11 @@ function sectionTitleKey(config: unknown): string | null {
   return typeof key === 'string' && key.trim() ? key.trim() : null;
 }
 
+function isTitleHidden(config: unknown): boolean {
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return false;
+  return (config as Record<string, unknown>).showTitle === false;
+}
+
 export function ScreensPage() {
   const { productId, current } = useProduct();
   const [screens, setScreens] = useState<Screen[]>([]);
@@ -473,9 +478,15 @@ export function ScreensPage() {
                             {(() => {
                               const key = sectionTitleKey(sec.config);
                               const display = (key && i18nTitles[key]) || sectionTitle(sec.config);
+                              const hidden = isTitleHidden(sec.config);
                               return display ? (
-                                <span style={{ color: 'var(--text-muted)', fontWeight: 400, marginLeft: 8 }}>
-                                  · {display}
+                                <span style={{
+                                  color: 'var(--text-muted)',
+                                  fontWeight: 400,
+                                  marginLeft: 8,
+                                  ...(hidden ? { textDecoration: 'line-through', opacity: 0.55 } : {}),
+                                }}>
+                                  · {display}{hidden && ' (hidden)'}
                                 </span>
                               ) : null;
                             })()}

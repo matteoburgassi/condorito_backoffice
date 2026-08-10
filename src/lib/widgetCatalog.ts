@@ -88,14 +88,18 @@ const HEADER_ASSET_KEYS = [
 const SUB_HEADER_SCHEMA: WidgetSchema = {
   type: 'object',
   additionalProperties: true,
-  required: ['title'],
   properties: {
+    showTitle: {
+      type: 'boolean',
+      title: 'Show title',
+      description: 'Set to false to hide the title in the app.',
+      default: true,
+    },
     title: {
       type: 'string',
       title: 'Title',
       description: 'Main heading displayed by the sub-header.',
       default: 'Free Area',
-      minLength: 1,
       'x-translatable': true,
     },
     subtitle: {
@@ -191,19 +195,24 @@ const ARTICLE_SCHEMA: WidgetSchema = {
 const COMIC_CAROUSEL_SCHEMA: WidgetSchema = {
   type: 'object',
   additionalProperties: true,
-  required: ['title', 'emptyMessage', 'data_binding'],
+  required: ['emptyMessage', 'data_binding'],
   properties: {
     key: {
       type: 'string',
       title: 'Widget key',
       description: 'Optional stable key used by filters and client behavior.',
     },
+    showTitle: {
+      type: 'boolean',
+      title: 'Show title',
+      description: 'Set to false to hide the title in the app.',
+      default: true,
+    },
     title: {
       type: 'string',
       title: 'Title',
       description: 'Heading displayed above the carousel.',
       default: 'Comics',
-      minLength: 1,
       'x-translatable': true,
     },
     emptyMessage: {
@@ -381,6 +390,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'items',
     sources: ['jokes', 'container'],
     example: {
+      showTitle: true,
       title: 'Chistes',
       emptyMessage: 'Sin contenido disponible',
       data_binding: { source: 'jokes', limit: 10 },
@@ -393,6 +403,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'items',
     sources: ['jokes', 'container'],
     example: {
+      showTitle: true,
       title: 'Condoricosas',
       emptyMessage: 'Sin contenido disponible',
       data_binding: { source: 'container', containerId: 'jokes-condoricosas', limit: 10 },
@@ -405,6 +416,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'items',
     sources: ['characters'],
     example: {
+      showTitle: true,
       i18n: { title: 'home.acerca_de_mi' },
       title: 'Acerca de Mí',
       emptyMessage: 'Sin personajes',
@@ -423,6 +435,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'items',
     sources: ['characters'],
     example: {
+      showTitle: true,
       i18n: { title: 'personajes.titulo' },
       title: 'PERSONAJES',
       columns: 2,
@@ -450,6 +463,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'items',
     sources: ['collection_categories'],
     example: {
+      showTitle: true,
       i18n: { sectionTitle: 'colecciones.series' },
       sectionTitle: 'SERIES',
       data_binding: { source: 'collection_categories' },
@@ -462,6 +476,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'special',
     sources: ['latest_strip'],
     example: {
+      showTitle: true,
       i18n: { title: 'home.tira_del_dia' },
       title: 'Tira del Día',
       data_binding: { source: 'latest_strip', freeOnly: true },
@@ -474,6 +489,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'items',
     sources: ['static'],
     example: {
+      showTitle: true,
       title: 'Galería',
       emptyMessage: 'Sin imágenes',
       cardWidth: 240,
@@ -488,6 +504,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'none',
     sources: [],
     example: {
+      showTitle: true,
       backgroundColor: '#E8452D',
       audience: 'all',
       i18n: { title: 'home.banner_title', ctaLabel: 'common.ver_mas' },
@@ -517,6 +534,7 @@ export const WIDGETS: WidgetDoc[] = [
     binding: 'none',
     sources: [],
     example: {
+      showTitle: true,
       i18n: {
         title: 'colecciones.titulo'
       },
@@ -571,7 +589,7 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Embedded PDF reader for a specific comic.',
     binding: 'none',
     sources: [],
-    example: { title: 'Revista', pdfUrl: 'https://…', issueNumber: 1, year: 2024 },
+    example: { showTitle: true, title: 'Revista', pdfUrl: 'https://…', issueNumber: 1, year: 2024 },
   },
 ];
 
@@ -591,6 +609,7 @@ export const BANNER_PRESETS: Record<
     label: 'Area Libre (free taste → /freemium)',
     type: 'banner',
     config: {
+      showTitle: true,
       key: 'home_area_libre',
       audience: 'guest',
       variant: 'columns',
@@ -613,6 +632,7 @@ export const BANNER_PRESETS: Record<
     label: 'Subscribe (Suscríbete)',
     type: 'banner',
     config: {
+      showTitle: true,
       key: 'suscribete_banner',
       audience: 'non_premium',
       variant: 'subscription',
@@ -637,6 +657,7 @@ export const BANNER_PRESETS: Record<
     label: 'Continua Leyendo (logged-in)',
     type: 'comic-carousel',
     config: {
+      showTitle: true,
       key: 'continua_leyendo',
       audience: 'logged_in',
       variant: 'continue-reading',
