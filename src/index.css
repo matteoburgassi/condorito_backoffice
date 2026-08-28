@@ -169,10 +169,11 @@ tbody tr:hover { background: var(--surface-2); }
 
 .switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; }
 .switch input { display: none; }
-.switch-track { width: 38px; height: 22px; border-radius: 22px; background: var(--surface-3); position: relative; transition: background 0.18s; flex-shrink: 0; border: 1px solid var(--border-strong); }
-.switch-thumb { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--text-muted); transition: transform 0.18s, background 0.18s; }
+.switch-track { width: 38px; height: 22px; padding: 2px; border-radius: 22px; background: var(--surface-3); display: flex; align-items: center; transition: background 0.18s; flex-shrink: 0; border: 1px solid var(--border-strong); }
+.switch-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; transition: transform 0.18s, background 0.18s; }
 .switch input:checked + .switch-track { background: var(--primary); border-color: var(--primary); }
 .switch input:checked + .switch-track .switch-thumb { transform: translateX(16px); background: #fff; }
+.switch-disabled { opacity: 0.5; cursor: not-allowed; }
 
 .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .search { position: relative; flex: 1; min-width: 180px; max-width: 340px; }
@@ -192,6 +193,23 @@ tbody tr:hover { background: var(--surface-2); }
 .pill-select label { margin: 0; }
 .pill-select select { width: auto; border: none; background: transparent; padding: 5px 8px; }
 .pill-select select:focus { box-shadow: none; }
+
+/* Login methods */
+.login-method-list { display: grid; gap: 16px; }
+.login-method-card { padding: 20px; overflow: visible; }
+.login-method-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+.login-method-heading h2 { font-size: 17px; margin-bottom: 4px; }
+.login-method-heading code { color: var(--text-faint); font-size: 12px; }
+.login-method-controls { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.login-method-control { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px; background: var(--surface-2); }
+.login-method-control strong { display: block; font-size: 13.5px; }
+.login-method-control > div > span { display: block; color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+.login-method-order { width: 88px; flex-shrink: 0; }
+.login-method-radio { width: 18px; height: 18px; accent-color: var(--primary); flex-shrink: 0; }
+.login-method-advanced { margin-top: 16px; color: var(--text-muted); font-size: 12.5px; }
+.login-method-advanced summary { cursor: pointer; }
+.login-method-advanced pre { margin-top: 10px; padding: 12px; overflow-x: auto; border-radius: var(--radius-sm); background: var(--bg); color: var(--text-muted); font-size: 12px; }
+.login-method-success { background: var(--success-soft); color: #4ade80; border: 1px solid rgba(46,160,67,0.3); }
 
 /* Auth */
 .auth-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; background:
@@ -224,6 +242,7 @@ tbody tr:hover { background: var(--surface-2); }
   .sidebar.open { transform: none; }
   .content { padding: 20px 16px; }
   .grid-2 { grid-template-columns: 1fr; }
+  .login-method-control { align-items: flex-start; }
 }
 /* Help / docs */
 .doc-section { margin-bottom: 28px; }
