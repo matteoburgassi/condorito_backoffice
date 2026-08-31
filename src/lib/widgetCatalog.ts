@@ -85,6 +85,13 @@ const HEADER_ASSET_KEYS = [
   'character_condorito',
 ];
 
+const AUDIENCE_SCHEMA: WidgetSchema = {
+  type: 'string',
+  title: 'Audience',
+  description: 'Optional client-side visibility rule.',
+  enum: ['all', 'guest', 'logged_in', 'non_premium'],
+};
+
 const SUB_HEADER_SCHEMA: WidgetSchema = {
   type: 'object',
   additionalProperties: true,
@@ -105,6 +112,7 @@ const SUB_HEADER_SCHEMA: WidgetSchema = {
       default: 'Todos los contenidos GRATIS!',
       'x-translatable': true,
     },
+    audience: AUDIENCE_SCHEMA,
     showBack: {
       type: 'boolean',
       title: 'Show back button',
@@ -160,6 +168,7 @@ const HERO_IMAGE_SCHEMA: WidgetSchema = {
       default: 345 / 231,
       exclusiveMinimum: 0,
     },
+    audience: AUDIENCE_SCHEMA,
   },
 };
 
@@ -185,6 +194,7 @@ const ARTICLE_SCHEMA: WidgetSchema = {
         title: 'Bullet',
       },
     },
+    audience: AUDIENCE_SCHEMA,
   },
 };
 
@@ -238,12 +248,7 @@ const COMIC_CAROUSEL_SCHEMA: WidgetSchema = {
       title: 'Background color',
       description: 'Optional section background color, for example #FDF5C4.',
     },
-    audience: {
-      type: 'string',
-      title: 'Audience',
-      description: 'Optional client-side visibility rule.',
-      enum: ['all', 'guest', 'logged_in', 'non_premium'],
-    },
+    audience: AUDIENCE_SCHEMA,
     data_binding: {
       type: 'object',
       title: 'Data source',

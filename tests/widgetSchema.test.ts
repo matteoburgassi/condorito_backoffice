@@ -35,6 +35,44 @@ const article = WIDGETS.find((widget) => widget.type === 'article');
 if (!article?.schema) throw new Error('Article schema is required for these tests.');
 const comicCarousel = WIDGETS.find((widget) => widget.type === 'comic-carousel');
 if (!comicCarousel?.schema) throw new Error('Comic-carousel schema is required for these tests.');
+const detailHeader = WIDGETS.find((widget) => widget.type === 'detail-header');
+if (!detailHeader?.schema) throw new Error('Detail-header schema is required for these tests.');
+
+const advancedFormWidgets = [
+  subHeader,
+  detailHeader,
+  heroImage,
+  article,
+  comicCarousel,
+];
+
+describe('advanced-form widget audiences', () => {
+  it.each(advancedFormWidgets)(
+    'exposes the supported audiences for $type without adding a default',
+    (widget) => {
+      expect(widget.schema.properties?.audience).toMatchObject({
+        type: 'string',
+        enum: ['all', 'guest', 'logged_in', 'non_premium'],
+      });
+      expect(defaultConfigForWidget(widget)).not.toHaveProperty('audience');
+    },
+  );
+
+  it.each(advancedFormWidgets)(
+    'validates audience values for $type',
+    (widget) => {
+      const defaults = defaultConfigForWidget(widget);
+      expect(validateWidgetConfig(widget.schema, {
+        ...defaults,
+        audience: 'logged_in',
+      })).toEqual({});
+      expect(validateWidgetConfig(widget.schema, {
+        ...defaults,
+        audience: 'members',
+      })).toHaveProperty('audience');
+    },
+  );
+});
 
 describe('sub-header schema form helpers', () => {
   it('recursively creates the starter configuration from schema defaults', () => {
