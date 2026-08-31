@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   addArrayItem,
+  bindingPropertyApplies,
   changeActionType,
   changeDataBindingSource,
   moveArrayItem,
@@ -15,6 +16,7 @@ import {
   WIDGETS,
   defaultConfigForWidget,
   defaultsFromSchema,
+  widgetEditorMode,
   type WidgetSchema,
 } from '../src/lib/widgetCatalog';
 import {
@@ -676,4 +678,253 @@ describe('comic-carousel schema form', () => {
       config: original,
     });
   });
+});
+
+describe('complete widget catalog forms', () => {
+  const newlyGeneratedTypes = [
+    'avatar-row',
+    'grid',
+    'comic-list',
+    'category-list',
+    'inline-pdf',
+    'horizontal-carousel',
+    'banner',
+    'upsell',
+    'screen-header',
+    'search-bar',
+    'pdf-reader',
+  ];
+
+  function generatedWidget(type: string) {
+    const widget = WIDGETS.find((candidate) => candidate.type === type);
+    if (!widget?.schema) throw new Error(`${type} must have a generated schema.`);
+    return { ...widget, schema: widget.schema };
+  }
+
+  it('gives every catalog widget an explicit editor mode', () => {
+    expect(WIDGETS.filter(
+      (widget) => widgetEditorMode(widget) === 'json',
+    )).toEqual([]);
+    expect(WIDGETS.filter(
+      (widget) => widgetEditorMode(widget) === 'runtime-managed',
+    ).map((widget) => widget.type)).toEqual(['footer']);
+  });
+
+  it.each(newlyGeneratedTypes)('creates valid defaults for %s', (type) => {
+    const widget = generatedWidget(type);
+    const defaults = defaultConfigForWidget(widget);
+    expect(defaults).toEqual(widget.example);
+    expect(validateWidgetConfig(widget.schema, defaults)).toEqual({});
+  });
+
+  it.each(newlyGeneratedTypes)('enforces every declared required field for %s', (type) => {
+    const widget = generatedWidget(type);
+    const defaults = defaultConfigForWidget(widget);
+    for (const requiredField of widget.schema.required ?? []) {
+      const incomplete = { ...defaults };
+      delete incomplete[requiredField];
+      expect(validateWidgetConfig(widget.schema, incomplete)).toHaveProperty(requiredField);
+    }
+  });
+
+  it('keeps character binding controls limited to supported runtime fields', () => {
+    for (const type of ['avatar-row', 'grid']) {
+      const binding = generatedWidget(type).schema.properties?.data_binding;
+      expect(binding?.properties).toHaveProperty('limit');
+      expect(binding?.properties).not.toHaveProperty('itemAction');
+      expect(binding?.properties).not.toHaveProperty('route');
+    }
+  });
+
+  it('validates comics, fixed-container, and Wishlist list bindings', () => {
+    const widget = generatedWidget('comic-list');
+    const binding = widget.schema.properties?.data_binding;
+    expect(binding?.properties?.source.enum).toEqual(['comics', 'container', 'wishlist']);
+    expect(validateWidgetConfig(widget.schema, {
+      ...defaultConfigForWidget(widget),
+      data_binding: { source: 'wishlist' },
+    })).toEqual({});
+    expect(validateWidgetConfig(widget.schema, {
+      ...defaultConfigForWidget(widget),
+      data_binding: { source: 'container' },
+    })).toHaveProperty('data_binding.containerId');
+  });
+
+  it('declares and cleans binding parameters through schema metadata', () => {
+    const widget = generatedWidget('comic-list');
+    const binding = widget.schema.properties?.data_binding;
+    if (!binding) throw new Error('Comic-list binding schema is required.');
+    const containerId = binding.properties?.containerId;
+    const limit = binding.properties?.limit;
+    if (!containerId || !limit) throw new Error('Binding parameter schemas are required.');
+
+    expect(bindingPropertyApplies(containerId, 'container')).toBe(true);
+    expect(bindingPropertyApplies(containerId, 'wishlist')).toBe(false);
+    expect(bindingPropertyApplies(limit, 'comics')).toBe(true);
+    expect(changeDataBindingSource({
+      source: 'container',
+      containerId: 'series',
+      limit: 8,
+      custom: 'preserved',
+    }, 'wishlist', binding)).toEqual({
+      source: 'wishlist',
+      custom: 'preserved',
+    });
+  });
+
+  it('omits fields that are generated or ignored at runtime', () => {
+    const comicList = generatedWidget('comic-list').schema.properties;
+    const categoryList = generatedWidget('category-list').schema.properties;
+    const inlinePdf = generatedWidget('inline-pdf').schema.properties;
+
+    expect(comicList).not.toHaveProperty('editing');
+    expect(comicList).not.toHaveProperty('items');
+    expect(categoryList).not.toHaveProperty('items');
+    expect(inlinePdf).not.toHaveProperty('pdfUrl');
+    expect(inlinePdf).not.toHaveProperty('imageUrl');
+    expect(inlinePdf).not.toHaveProperty('aspectRatio');
+    expect(inlinePdf).not.toHaveProperty('action');
+    expect(inlinePdf?.data_binding?.properties).not.toHaveProperty('freeOnly');
+  });
+
+  it('edits static carousel object arrays and validates nested actions', () => {
+    const widget = generatedWidget('horizontal-carousel');
+    const defaults = defaultConfigForWidget(widget);
+    expect(defaults).toMatchObject({
+      showTitle: true,
+      cardWidth: 240,
+      cardHeight: 160,
+      data_binding: {
+        source: 'static',
+        items: [{ key: '0', imageUrl: expect.any(String) }],
+      },
+    });
+    expect(validateWidgetConfig(widget.schema, {
+      ...defaults,
+      data_binding: { source: 'static', items: [] },
+    })).toHaveProperty('data_binding.items');
+    expect(validateWidgetConfig(widget.schema, {
+      ...defaults,
+      data_binding: {
+        source: 'static',
+        items: [{ key: 'one', imageUrl: 'https://example.com/one.jpg', action: { type: 'navigate' } }],
+      },
+    })).toHaveProperty('data_binding.items.0.action.route');
+  });
+
+  it('preserves and validates both production banner presets', () => {
+    const widget = generatedWidget('banner');
+    for (const preset of [BANNER_PRESETS.area_libre, BANNER_PRESETS.subscribe]) {
+      expect(validateWidgetConfig(widget.schema, preset.config)).toEqual({});
+    }
+    expect(widget.schema.properties?.variant?.enum).toEqual([
+      'columns',
+      'stacked',
+      'subscription',
+    ]);
+    expect(widget.schema.properties?.assets?.properties?.topImage?.enum).toContain(
+      'subscribe-banner-comics',
+    );
+    expect(widget.schema.properties).toHaveProperty('audience');
+  });
+
+  it('keeps static-widget controls aligned with their runtime contracts', () => {
+    const upsell = generatedWidget('upsell');
+    const screenHeader = generatedWidget('screen-header');
+    const searchBar = generatedWidget('search-bar');
+    const pdfReader = generatedWidget('pdf-reader');
+
+    expect(upsell.schema.properties?.condition?.enum).toEqual(['not_premium']);
+    expect(upsell.schema.properties).not.toHaveProperty('audience');
+    expect(screenHeader.schema.properties).toHaveProperty('audience');
+    expect(screenHeader.schema.properties).toHaveProperty('rightAction');
+    expect(validateWidgetConfig(searchBar.schema, {
+      placeholder: 'Buscar',
+      resultsRoute: '',
+    })).toHaveProperty('resultsRoute');
+    expect(pdfReader.schema.properties).toHaveProperty('cmsId');
+    expect(translatableProperties(pdfReader.schema)).toEqual([]);
+  });
+
+  it('validates presentation enums, dimensions, and context-specific actions', () => {
+    const grid = generatedWidget('grid');
+    const comicList = generatedWidget('comic-list');
+    const carousel = generatedWidget('horizontal-carousel');
+    const banner = generatedWidget('banner');
+    const upsell = generatedWidget('upsell');
+    const screenHeader = generatedWidget('screen-header');
+
+    expect(validateWidgetConfig(grid.schema, {
+      ...defaultConfigForWidget(grid),
+      columns: 0,
+    })).toHaveProperty('columns');
+    expect(validateWidgetConfig(comicList.schema, {
+      ...defaultConfigForWidget(comicList),
+      variant: 'cards',
+    })).toHaveProperty('variant');
+    expect(validateWidgetConfig(carousel.schema, {
+      ...defaultConfigForWidget(carousel),
+      cardWidth: 0,
+      cardHeight: -1,
+    })).toMatchObject({
+      cardWidth: expect.any(String),
+      cardHeight: expect.any(String),
+    });
+    expect(validateWidgetConfig(banner.schema, {
+      ...defaultConfigForWidget(banner),
+      ctaAction: { type: 'sign_out' },
+    })).toHaveProperty('ctaAction.type');
+    expect(validateWidgetConfig(upsell.schema, {
+      ...defaultConfigForWidget(upsell),
+      condition: 'guest',
+    })).toHaveProperty('condition');
+
+    const rightActionSchema = screenHeader.schema.properties?.rightAction;
+    if (!rightActionSchema) throw new Error('Screen-header right action schema is required.');
+    expect(validateWidgetConfig(screenHeader.schema, {
+      ...defaultConfigForWidget(screenHeader),
+      rightAction: optionalObjectDefaults(rightActionSchema),
+    })).toEqual({});
+  });
+
+  it('exposes translation controls only for runtime-translated copy', () => {
+    expect(translatableProperties(generatedWidget('avatar-row').schema).map(({ key }) => key))
+      .toEqual(['title', 'emptyMessage', 'headerAction.label']);
+    expect(translatableProperties(generatedWidget('banner').schema).map(({ key }) => key))
+      .toEqual(['title', 'subtitle', 'subtitle2', 'ctaLabel']);
+    expect(translatableProperties(generatedWidget('upsell').schema).map(({ key }) => key))
+      .toEqual(['headline', 'subtitle', 'ctaLabel']);
+    expect(translatableProperties(generatedWidget('screen-header').schema).map(({ key }) => key))
+      .toEqual(['title', 'subtitle', 'rightAction.label']);
+  });
+
+  it('marks Footer as runtime-managed and preserves stored config verbatim', () => {
+    const footer = WIDGETS.find((widget) => widget.type === 'footer');
+    expect(widgetEditorMode(footer)).toBe('runtime-managed');
+    expect(footer?.schema).toBeUndefined();
+    expect(defaultConfigForWidget(footer!)).toEqual({});
+
+    const stored = {
+      key: 'legacy-footer',
+      items: [{ key: 'terms', custom: true }],
+      copyright: 'Preserve me',
+    };
+    expect(parseWidgetConfigJson(stringifyWidgetConfig(stored))).toEqual({
+      config: stored,
+    });
+  });
+
+  it.each(newlyGeneratedTypes)(
+    'round-trips unknown Advanced JSON properties for %s',
+    (type) => {
+      const widget = generatedWidget(type);
+      const original = {
+        ...defaultConfigForWidget(widget),
+        custom: { experiment: type },
+      };
+      expect(parseWidgetConfigJson(stringifyWidgetConfig(original))).toEqual({
+        config: original,
+      });
+    },
+  );
 });

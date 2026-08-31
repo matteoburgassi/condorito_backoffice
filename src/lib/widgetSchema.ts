@@ -111,10 +111,17 @@ export function validateWidgetConfig(
       }
     }
     if (currentSchema['x-control'] === 'data-binding') {
-      if (record.source === 'container' && (
-        typeof record.containerId !== 'string' || record.containerId.trim() === ''
-      )) {
-        errors[`${path}.containerId`.replace(/^\./, '')] = 'is required for the container source';
+      const source = typeof record.source === 'string' ? record.source : '';
+      for (const [key, property] of Object.entries(currentSchema.properties ?? {})) {
+        if (!property['x-required-for-sources']?.includes(source)) continue;
+        const fieldValue = record[key];
+        const isMissing = fieldValue === undefined
+          || fieldValue === null
+          || (typeof fieldValue === 'string' && fieldValue.trim() === '')
+          || (Array.isArray(fieldValue) && fieldValue.length === 0);
+        if (isMissing) {
+          errors[`${path}.${key}`.replace(/^\./, '')] = `is required for the ${source} source`;
+        }
       }
     }
     if (currentSchema['x-control'] === 'action') {
