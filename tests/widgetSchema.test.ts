@@ -3,6 +3,7 @@ import {
   addArrayItem,
   changeActionType,
   changeDataBindingSource,
+  moveArrayItem,
   optionalObjectDefaults,
   parseNumberInput,
   removeArrayItem,
@@ -14,6 +15,7 @@ import {
   WIDGETS,
   defaultConfigForWidget,
   defaultsFromSchema,
+  type WidgetSchema,
 } from '../src/lib/widgetCatalog';
 import {
   asWidgetConfig,
@@ -35,8 +37,14 @@ const article = WIDGETS.find((widget) => widget.type === 'article');
 if (!article?.schema) throw new Error('Article schema is required for these tests.');
 const comicCarousel = WIDGETS.find((widget) => widget.type === 'comic-carousel');
 if (!comicCarousel?.schema) throw new Error('Comic-carousel schema is required for these tests.');
+const jokeCarousel = WIDGETS.find((widget) => widget.type === 'joke-carousel');
+if (!jokeCarousel?.schema) throw new Error('Joke-carousel schema is required for these tests.');
+const comicPanel = WIDGETS.find((widget) => widget.type === 'comic-panel');
+if (!comicPanel?.schema) throw new Error('Comic-panel schema is required for these tests.');
 const detailHeader = WIDGETS.find((widget) => widget.type === 'detail-header');
 if (!detailHeader?.schema) throw new Error('Detail-header schema is required for these tests.');
+const filterChips = WIDGETS.find((widget) => widget.type === 'filter-chips');
+if (!filterChips?.schema) throw new Error('Filter-chips schema is required for these tests.');
 
 const advancedFormWidgets = [
   subHeader,
@@ -70,6 +78,262 @@ describe('advanced-form widget audiences', () => {
         ...defaults,
         audience: 'members',
       })).toHaveProperty('audience');
+    },
+  );
+});
+
+describe('object-array form helpers', () => {
+  it('updates nested array paths without dropping sibling or unknown properties', () => {
+    const current = {
+      items: [{
+        key: 'all',
+        custom: 'preserved',
+        filter: { kind: 'all', customFilter: true },
+      }],
+    };
+
+    expect(setValueAtPath(current, ['items', '0', 'filter', 'kind'], 'decade')).toEqual({
+      items: [{
+        key: 'all',
+        custom: 'preserved',
+        filter: { kind: 'decade', customFilter: true },
+      }],
+    });
+  });
+
+  it('moves array items while preserving order and safely handling boundaries', () => {
+    const items = ['all', 'favorites', '2020s'];
+    expect(moveArrayItem(items, 1, -1)).toEqual(['favorites', 'all', '2020s']);
+    expect(moveArrayItem(items, 1, 1)).toEqual(['all', '2020s', 'favorites']);
+    expect(moveArrayItem(items, 0, -1)).toBe(items);
+    expect(moveArrayItem(items, items.length - 1, 1)).toBe(items);
+  });
+
+  it('creates a complete default object for newly added filter items', () => {
+    const itemSchema = filterChips.schema.properties?.items?.items;
+    if (!itemSchema) throw new Error('Filter-chip item schema is required.');
+
+    const newItem = defaultsFromSchema(itemSchema);
+    expect(newItem).toEqual({
+      key: 'new-filter',
+      label: 'New filter',
+      filter: { kind: 'all' },
+    });
+    const added = addArrayItem<Record<string, unknown>>([], newItem as Record<string, unknown>);
+    expect(added).toEqual([newItem]);
+    expect(removeArrayItem(added, 0)).toEqual([]);
+  });
+
+  it('validates controls nested inside object arrays with indexed paths', () => {
+    const schema: WidgetSchema = {
+      type: 'object',
+      properties: {
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              action: {
+                type: 'object',
+                'x-control': 'action',
+                properties: {
+                  type: { type: 'string' },
+                  route: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    expect(validateWidgetConfig(schema, {
+      items: [{ action: { type: 'navigate' } }],
+    })).toHaveProperty('items.0.action.route');
+  });
+});
+
+describe('filter-chips schema form', () => {
+  it('creates the production-aligned starter configuration', () => {
+    const defaults = defaultConfigForWidget(filterChips);
+    expect(defaults).toEqual(filterChips.example);
+    expect(defaults).toMatchObject({
+      targetKey: 'category_comics',
+      items: [
+        { key: 'all', filter: { kind: 'all' }, selected: true },
+        { key: 'fav', filter: { kind: 'favorites' } },
+        { key: '2020s', filter: { kind: 'decade', from: 2020, to: 2029 } },
+        { key: '1990s', filter: { kind: 'decade', from: 1990, to: 1999 } },
+      ],
+    });
+    expect(validateWidgetConfig(filterChips.schema, defaults)).toEqual({});
+  });
+
+  it('accepts all supported filter shapes', () => {
+    expect(validateWidgetConfig(filterChips.schema, {
+      targetKey: 'category_comics',
+      items: [
+        { key: 'all', label: 'Todos', filter: { kind: 'all' } },
+        { key: 'fav', label: 'Favoritos', filter: { kind: 'favorites' } },
+        { key: '1980s', label: '1980s', filter: { kind: 'decade', from: 1980, to: 1989 } },
+      ],
+    })).toEqual({});
+  });
+
+  it('rejects missing or reversed decade bounds with indexed errors', () => {
+    expect(validateWidgetConfig(filterChips.schema, {
+      targetKey: 'category_comics',
+      items: [
+        { key: 'missing', label: 'Missing', filter: { kind: 'decade' } },
+        { key: 'reversed', label: 'Reversed', filter: { kind: 'decade', from: 2029, to: 2020 } },
+      ],
+    })).toMatchObject({
+      'items.0.filter.from': expect.any(String),
+      'items.0.filter.to': expect.any(String),
+      'items.1.filter.from': expect.any(String),
+    });
+  });
+
+  it('rejects empty lists, duplicate keys, and multiple initial selections', () => {
+    expect(validateWidgetConfig(filterChips.schema, {
+      targetKey: 'category_comics',
+      items: [],
+    })).toHaveProperty('items');
+
+    expect(validateWidgetConfig(filterChips.schema, {
+      targetKey: 'category_comics',
+      items: [
+        { key: 'same', label: 'First', selected: true, filter: { kind: 'all' } },
+        { key: 'same', label: 'Second', selected: true, filter: { kind: 'favorites' } },
+      ],
+    })).toMatchObject({
+      'items.1.key': expect.any(String),
+      'items.1.selected': expect.any(String),
+    });
+  });
+});
+
+describe('joke widget schema forms', () => {
+  it('creates valid source-specific starter configurations', () => {
+    expect(defaultConfigForWidget(jokeCarousel)).toEqual({
+      title: 'Chistes',
+      showTitle: true,
+      emptyMessage: 'Sin contenido disponible',
+      data_binding: { source: 'jokes', limit: 10 },
+    });
+    expect(defaultConfigForWidget(comicPanel)).toEqual({
+      title: 'Condoricosas',
+      showTitle: true,
+      emptyMessage: 'Sin contenido disponible',
+      data_binding: {
+        source: 'container',
+        containerId: 'jokes-condoricosas',
+        limit: 10,
+      },
+    });
+    expect(validateWidgetConfig(
+      jokeCarousel.schema,
+      defaultConfigForWidget(jokeCarousel),
+    )).toEqual({});
+    expect(validateWidgetConfig(
+      comicPanel.schema,
+      defaultConfigForWidget(comicPanel),
+    )).toEqual({});
+  });
+
+  it.each([jokeCarousel, comicPanel])(
+    'supports jokes and container bindings for $type',
+    (widget) => {
+      const binding = widget.schema.properties?.data_binding;
+      expect(binding?.properties?.source.enum).toEqual(['jokes', 'container']);
+      expect(validateWidgetConfig(widget.schema, {
+        ...defaultConfigForWidget(widget),
+        data_binding: { source: 'jokes', limit: 10, freeOnly: true, title: 'Chiste' },
+      })).toEqual({});
+      expect(validateWidgetConfig(widget.schema, {
+        ...defaultConfigForWidget(widget),
+        data_binding: { source: 'container', limit: 10 },
+      })).toHaveProperty('data_binding.containerId');
+      expect(validateWidgetConfig(widget.schema, {
+        ...defaultConfigForWidget(widget),
+        data_binding: { source: 'container', containerId: 'condoricosas_2', limit: 10 },
+      })).toEqual({});
+    },
+  );
+
+  it('cleans known source-specific fields while preserving custom binding data', () => {
+    const binding = {
+      source: 'jokes',
+      containerId: 'chistes',
+      limit: 10,
+      freeOnly: true,
+      title: 'Chiste',
+      custom: 'preserved',
+    };
+    expect(changeDataBindingSource(binding, 'container')).toEqual({
+      source: 'container',
+      containerId: 'chistes',
+      limit: 10,
+      custom: 'preserved',
+    });
+    expect(changeDataBindingSource(binding, 'continue_reading')).toEqual({
+      source: 'continue_reading',
+      custom: 'preserved',
+    });
+  });
+
+  it('validates widget-specific positive dimensions', () => {
+    expect(jokeCarousel.schema.properties).toHaveProperty('cardWidth');
+    expect(comicPanel.schema.properties).not.toHaveProperty('cardWidth');
+    expect(validateWidgetConfig(jokeCarousel.schema, {
+      ...defaultConfigForWidget(jokeCarousel),
+      cardWidth: 0,
+      cardHeight: -1,
+    })).toMatchObject({
+      cardWidth: expect.any(String),
+      cardHeight: expect.any(String),
+    });
+    expect(validateWidgetConfig(comicPanel.schema, {
+      ...defaultConfigForWidget(comicPanel),
+      cardHeight: 0,
+    })).toHaveProperty('cardHeight');
+  });
+
+  it.each([jokeCarousel, comicPanel])(
+    'supports validated optional header actions for $type',
+    (widget) => {
+      const headerActionSchema = widget.schema.properties?.headerAction;
+      if (!headerActionSchema) throw new Error('Header action schema is required.');
+      const headerAction = optionalObjectDefaults(headerActionSchema);
+      expect(headerAction).toEqual({
+        label: 'Ver todo',
+        action: { type: 'navigate', route: '/colecciones' },
+      });
+      expect(validateWidgetConfig(widget.schema, {
+        ...defaultConfigForWidget(widget),
+        headerAction,
+      })).toEqual({});
+      expect(validateWidgetConfig(widget.schema, {
+        ...defaultConfigForWidget(widget),
+        headerAction: {
+          label: 'Open',
+          action: { type: 'navigate' },
+        },
+      })).toHaveProperty('headerAction.action.route');
+    },
+  );
+
+  it.each([jokeCarousel, comicPanel])(
+    'exposes translations without audience or static items for $type',
+    (widget) => {
+      expect(translatableProperties(widget.schema).map(({ key }) => key)).toEqual([
+        'title',
+        'emptyMessage',
+        'headerAction.label',
+      ]);
+      expect(widget.schema.properties).not.toHaveProperty('audience');
+      expect(widget.schema.properties).not.toHaveProperty('items');
+      expect(widget.schema.properties?.data_binding?.properties).not.toHaveProperty('items');
     },
   );
 });

@@ -14,6 +14,7 @@ export type WidgetSchema = {
   default?: unknown;
   enum?: Array<string | number>;
   minLength?: number;
+  minItems?: number;
   minimum?: number;
   exclusiveMinimum?: number;
   properties?: Record<string, WidgetSchema>;
@@ -26,6 +27,8 @@ export type WidgetSchema = {
   'x-optional'?: boolean;
   /** Marks literal string fields that can be overridden through config.i18n. */
   'x-translatable'?: boolean;
+  /** Applies cross-field validation that cannot be expressed by this schema subset. */
+  'x-validate'?: 'filter-spec' | 'filter-chip-items';
 };
 
 export type WidgetDoc = {
@@ -198,6 +201,84 @@ const ARTICLE_SCHEMA: WidgetSchema = {
   },
 };
 
+const HEADER_ACTION_SCHEMA: WidgetSchema = {
+  type: 'object',
+  title: 'Header action',
+  description: 'Optional action displayed beside the section title.',
+  required: ['label', 'action'],
+  additionalProperties: true,
+  'x-optional': true,
+  properties: {
+    label: {
+      type: 'string',
+      title: 'Label',
+      default: 'Ver todo',
+      'x-translatable': true,
+    },
+    action: {
+      type: 'object',
+      title: 'Action',
+      default: { type: 'navigate', route: '/colecciones' },
+      required: ['type'],
+      additionalProperties: true,
+      'x-control': 'action',
+      properties: {
+        type: {
+          type: 'string',
+          title: 'Type',
+          enum: ['navigate', 'open_webview', 'show_subscription', 'go_back', 'premium_gate'],
+        },
+        route: {
+          type: 'string',
+          title: 'Route',
+        },
+        url: {
+          type: 'string',
+          title: 'URL',
+        },
+      },
+    },
+  },
+};
+
+function jokeDataBindingSchema(defaultValue: Record<string, unknown>): WidgetSchema {
+  return {
+    type: 'object',
+    title: 'Data source',
+    description: 'Select the live source that fills joke items.',
+    default: defaultValue,
+    required: ['source'],
+    additionalProperties: true,
+    'x-control': 'data-binding',
+    properties: {
+      source: {
+        type: 'string',
+        title: 'Source',
+        enum: ['jokes', 'container'],
+      },
+      containerId: {
+        type: 'string',
+        title: 'Container ID',
+      },
+      limit: {
+        type: 'number',
+        title: 'Limit',
+        minimum: 1,
+      },
+      freeOnly: {
+        type: 'boolean',
+        title: 'Free editions only',
+        description: 'Jokes source only. Limits results to free editions.',
+      },
+      title: {
+        type: 'string',
+        title: 'Reader title fallback',
+        description: 'Jokes source only. Used when an edition has no number.',
+      },
+    },
+  };
+}
+
 const COMIC_CAROUSEL_SCHEMA: WidgetSchema = {
   type: 'object',
   additionalProperties: true,
@@ -274,44 +355,190 @@ const COMIC_CAROUSEL_SCHEMA: WidgetSchema = {
         },
       },
     },
-    headerAction: {
-      type: 'object',
-      title: 'Header action',
-      description: 'Optional action displayed beside the carousel title.',
-      required: ['label', 'action'],
-      additionalProperties: true,
-      'x-optional': true,
-      properties: {
-        label: {
-          type: 'string',
-          title: 'Label',
-          default: 'Ver todo',
-          'x-translatable': true,
-        },
-        action: {
-          type: 'object',
-          title: 'Action',
-          default: { type: 'navigate', route: '/colecciones' },
-          required: ['type'],
-          additionalProperties: true,
-          'x-control': 'action',
-          properties: {
-            type: {
-              type: 'string',
-              title: 'Type',
-              enum: ['navigate', 'open_webview', 'show_subscription', 'go_back', 'premium_gate'],
-            },
-            route: {
-              type: 'string',
-              title: 'Route',
-            },
-            url: {
-              type: 'string',
-              title: 'URL',
-            },
-          },
-        },
-      },
+    headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+const JOKE_CAROUSEL_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['emptyMessage', 'data_binding'],
+  properties: {
+    key: {
+      type: 'string',
+      title: 'Widget key',
+      description: 'Optional stable key used by client behavior.',
+    },
+    title: {
+      type: 'string',
+      title: 'Title',
+      description: 'Optional heading displayed above the carousel.',
+      default: 'Chistes',
+      'x-translatable': true,
+    },
+    showTitle: {
+      type: 'boolean',
+      title: 'Show title',
+      description: 'Hides the title when disabled. Defaults to visible when omitted.',
+      default: true,
+    },
+    emptyMessage: {
+      type: 'string',
+      title: 'Empty message',
+      description: 'Message displayed when the source returns no items.',
+      default: 'Sin contenido disponible',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    cardWidth: {
+      type: 'number',
+      title: 'Card width',
+      description: 'Optional card width override. The app defaults to 110.',
+      exclusiveMinimum: 0,
+    },
+    cardHeight: {
+      type: 'number',
+      title: 'Card height',
+      description: 'Optional card height override. The app defaults to 155.',
+      exclusiveMinimum: 0,
+    },
+    data_binding: jokeDataBindingSchema({ source: 'jokes', limit: 10 }),
+    headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+const COMIC_PANEL_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['emptyMessage', 'data_binding'],
+  properties: {
+    key: {
+      type: 'string',
+      title: 'Widget key',
+      description: 'Optional stable key used by client behavior.',
+    },
+    title: {
+      type: 'string',
+      title: 'Title',
+      description: 'Optional heading displayed above the panel.',
+      default: 'Condoricosas',
+      'x-translatable': true,
+    },
+    showTitle: {
+      type: 'boolean',
+      title: 'Show title',
+      description: 'Hides the title when disabled. Defaults to visible when omitted.',
+      default: true,
+    },
+    emptyMessage: {
+      type: 'string',
+      title: 'Empty message',
+      description: 'Message displayed when the source returns no items.',
+      default: 'Sin contenido disponible',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    cardHeight: {
+      type: 'number',
+      title: 'Card height',
+      description: 'Optional card height override. The app defaults to 155.',
+      exclusiveMinimum: 0,
+    },
+    data_binding: jokeDataBindingSchema({
+      source: 'container',
+      containerId: 'jokes-condoricosas',
+      limit: 10,
+    }),
+    headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+const FILTER_CHIPS_DEFAULT_ITEMS = [
+  { key: 'all', label: 'Todos', filter: { kind: 'all' }, selected: true },
+  { key: 'fav', label: 'Favoritos', filter: { kind: 'favorites' } },
+  { key: '2020s', label: '2020s', filter: { kind: 'decade', from: 2020, to: 2029 } },
+  { key: '1990s', label: '1990s', filter: { kind: 'decade', from: 1990, to: 1999 } },
+];
+
+const FILTER_SPEC_SCHEMA: WidgetSchema = {
+  type: 'object',
+  title: 'Filter',
+  required: ['kind'],
+  additionalProperties: true,
+  'x-validate': 'filter-spec',
+  properties: {
+    kind: {
+      type: 'string',
+      title: 'Filter type',
+      default: 'all',
+      enum: ['all', 'favorites', 'decade'],
+    },
+    from: {
+      type: 'number',
+      title: 'From year',
+      description: 'Required only for decade filters.',
+    },
+    to: {
+      type: 'number',
+      title: 'To year',
+      description: 'Required only for decade filters.',
+    },
+  },
+};
+
+const FILTER_CHIP_ITEM_SCHEMA: WidgetSchema = {
+  type: 'object',
+  title: 'Filter chip',
+  required: ['key', 'label', 'filter'],
+  additionalProperties: true,
+  properties: {
+    key: {
+      type: 'string',
+      title: 'Key',
+      description: 'Stable identifier unique within this filter row.',
+      default: 'new-filter',
+      minLength: 1,
+    },
+    label: {
+      type: 'string',
+      title: 'Label',
+      default: 'New filter',
+      minLength: 1,
+    },
+    selected: {
+      type: 'boolean',
+      title: 'Initially selected',
+      description: 'At most one filter can be initially selected.',
+    },
+    filter: FILTER_SPEC_SCHEMA,
+  },
+};
+
+const FILTER_CHIPS_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['targetKey', 'items'],
+  properties: {
+    key: {
+      type: 'string',
+      title: 'Widget key',
+      description: 'Optional stable key for this filter row.',
+    },
+    targetKey: {
+      type: 'string',
+      title: 'Target widget key',
+      description: 'Key of the comic-list section controlled by these filters.',
+      default: 'category_comics',
+      minLength: 1,
+    },
+    items: {
+      type: 'array',
+      title: 'Filters',
+      description: 'Filters are evaluated in this order.',
+      default: FILTER_CHIPS_DEFAULT_ITEMS,
+      minItems: 1,
+      items: FILTER_CHIP_ITEM_SCHEMA,
+      'x-validate': 'filter-chip-items',
     },
   },
 };
@@ -385,11 +612,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Horizontal rail of jokes / editions.',
     binding: 'items',
     sources: ['jokes', 'container'],
-    example: {
-      title: 'Chistes',
-      emptyMessage: 'Sin contenido disponible',
-      data_binding: { source: 'jokes', limit: 10 },
-    },
+    schema: JOKE_CAROUSEL_SCHEMA,
+    example: defaultsFromSchema(JOKE_CAROUSEL_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'comic-panel',
@@ -397,11 +621,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Panel-style list, used for condoricosas.',
     binding: 'items',
     sources: ['jokes', 'container'],
-    example: {
-      title: 'Condoricosas',
-      emptyMessage: 'Sin contenido disponible',
-      data_binding: { source: 'container', containerId: 'jokes-condoricosas', limit: 10 },
-    },
+    schema: COMIC_PANEL_SCHEMA,
+    example: defaultsFromSchema(COMIC_PANEL_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'avatar-row',
@@ -551,13 +772,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Filter chips that target another section on the same screen by key.',
     binding: 'none',
     sources: [],
-    example: {
-      targetKey: 'category_comics',
-      items: [
-        { key: 'all', label: 'Todos', filter: { kind: 'all' }, selected: true },
-        { key: 'fav', label: 'Favoritos', filter: { kind: 'favorites' } },
-      ],
-    },
+    schema: FILTER_CHIPS_SCHEMA,
+    example: defaultsFromSchema(FILTER_CHIPS_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'footer',
