@@ -29,6 +29,10 @@ export type WidgetSchema = {
   'x-translatable'?: boolean;
   /** Applies cross-field validation that cannot be expressed by this schema subset. */
   'x-validate'?: 'filter-spec' | 'filter-chip-items';
+  /** Binding sources for which this data-binding property is visible. */
+  'x-binding-sources'?: string[];
+  /** Binding sources for which this property is required. */
+  'x-required-for-sources'?: string[];
 };
 
 export type WidgetDoc = {
@@ -42,6 +46,8 @@ export type WidgetDoc = {
   example: Record<string, unknown>;
   /** Runtime configuration contract used by the generated section form. */
   schema?: WidgetSchema;
+  /** The Edge Function owns this widget's configuration; the Back Office edits only section metadata. */
+  editor?: 'runtime-managed';
 };
 
 export type SourceDoc = {
@@ -79,6 +85,14 @@ export function defaultConfigForWidget(widget: WidgetDoc): Record<string, unknow
   return (defaultsFromSchema(widget.schema) ?? {}) as Record<string, unknown>;
 }
 
+export function widgetEditorMode(widget: WidgetDoc | undefined):
+  | 'generated'
+  | 'runtime-managed'
+  | 'json' {
+  if (widget?.editor === 'runtime-managed') return 'runtime-managed';
+  return widget?.schema ? 'generated' : 'json';
+}
+
 const HEADER_ASSET_KEYS = [
   ...CATEGORY_ASSET_OPTIONS.map((option) => option.value),
   'condorito-1',
@@ -94,6 +108,30 @@ const AUDIENCE_SCHEMA: WidgetSchema = {
   description: 'Optional client-side visibility rule.',
   enum: ['all', 'guest', 'logged_in', 'non_premium'],
 };
+
+const WIDGET_KEY_SCHEMA: WidgetSchema = {
+  type: 'string',
+  title: 'Widget key',
+  description: 'Optional stable key used by client behavior and cross-widget references.',
+};
+
+const SHOW_TITLE_SCHEMA: WidgetSchema = {
+  type: 'boolean',
+  title: 'Show title',
+  description: 'Hides the section title when disabled.',
+  default: true,
+};
+
+function emptyMessageSchema(defaultValue: string): WidgetSchema {
+  return {
+    type: 'string',
+    title: 'Empty message',
+    description: 'Message displayed when the source returns no items.',
+    default: defaultValue,
+    minLength: 1,
+    'x-translatable': true,
+  };
+}
 
 const SUB_HEADER_SCHEMA: WidgetSchema = {
   type: 'object',
@@ -259,21 +297,26 @@ function jokeDataBindingSchema(defaultValue: Record<string, unknown>): WidgetSch
       containerId: {
         type: 'string',
         title: 'Container ID',
+        'x-binding-sources': ['jokes', 'container'],
+        'x-required-for-sources': ['container'],
       },
       limit: {
         type: 'number',
         title: 'Limit',
         minimum: 1,
+        'x-binding-sources': ['jokes', 'container'],
       },
       freeOnly: {
         type: 'boolean',
         title: 'Free editions only',
         description: 'Jokes source only. Limits results to free editions.',
+        'x-binding-sources': ['jokes'],
       },
       title: {
         type: 'string',
         title: 'Reader title fallback',
         description: 'Jokes source only. Used when an edition has no number.',
+        'x-binding-sources': ['jokes'],
       },
     },
   };
@@ -284,11 +327,7 @@ const COMIC_CAROUSEL_SCHEMA: WidgetSchema = {
   additionalProperties: true,
   required: ['title', 'emptyMessage', 'data_binding'],
   properties: {
-    key: {
-      type: 'string',
-      title: 'Widget key',
-      description: 'Optional stable key used by filters and client behavior.',
-    },
+    key: WIDGET_KEY_SCHEMA,
     title: {
       type: 'string',
       title: 'Title',
@@ -297,14 +336,7 @@ const COMIC_CAROUSEL_SCHEMA: WidgetSchema = {
       minLength: 1,
       'x-translatable': true,
     },
-    emptyMessage: {
-      type: 'string',
-      title: 'Empty message',
-      description: 'Message displayed when the source returns no items.',
-      default: 'Sin comics disponibles',
-      minLength: 1,
-      'x-translatable': true,
-    },
+    emptyMessage: emptyMessageSchema('Sin comics disponibles'),
     variant: {
       type: 'string',
       title: 'Variant',
@@ -347,11 +379,14 @@ const COMIC_CAROUSEL_SCHEMA: WidgetSchema = {
         containerId: {
           type: 'string',
           title: 'Container ID',
+          'x-binding-sources': ['comics', 'container'],
+          'x-required-for-sources': ['container'],
         },
         limit: {
           type: 'number',
           title: 'Limit',
           minimum: 1,
+          'x-binding-sources': ['comics', 'container'],
         },
       },
     },
@@ -364,11 +399,7 @@ const JOKE_CAROUSEL_SCHEMA: WidgetSchema = {
   additionalProperties: true,
   required: ['emptyMessage', 'data_binding'],
   properties: {
-    key: {
-      type: 'string',
-      title: 'Widget key',
-      description: 'Optional stable key used by client behavior.',
-    },
+    key: WIDGET_KEY_SCHEMA,
     title: {
       type: 'string',
       title: 'Title',
@@ -376,20 +407,8 @@ const JOKE_CAROUSEL_SCHEMA: WidgetSchema = {
       default: 'Chistes',
       'x-translatable': true,
     },
-    showTitle: {
-      type: 'boolean',
-      title: 'Show title',
-      description: 'Hides the title when disabled. Defaults to visible when omitted.',
-      default: true,
-    },
-    emptyMessage: {
-      type: 'string',
-      title: 'Empty message',
-      description: 'Message displayed when the source returns no items.',
-      default: 'Sin contenido disponible',
-      minLength: 1,
-      'x-translatable': true,
-    },
+    showTitle: SHOW_TITLE_SCHEMA,
+    emptyMessage: emptyMessageSchema('Sin contenido disponible'),
     cardWidth: {
       type: 'number',
       title: 'Card width',
@@ -412,11 +431,7 @@ const COMIC_PANEL_SCHEMA: WidgetSchema = {
   additionalProperties: true,
   required: ['emptyMessage', 'data_binding'],
   properties: {
-    key: {
-      type: 'string',
-      title: 'Widget key',
-      description: 'Optional stable key used by client behavior.',
-    },
+    key: WIDGET_KEY_SCHEMA,
     title: {
       type: 'string',
       title: 'Title',
@@ -424,20 +439,8 @@ const COMIC_PANEL_SCHEMA: WidgetSchema = {
       default: 'Condoricosas',
       'x-translatable': true,
     },
-    showTitle: {
-      type: 'boolean',
-      title: 'Show title',
-      description: 'Hides the title when disabled. Defaults to visible when omitted.',
-      default: true,
-    },
-    emptyMessage: {
-      type: 'string',
-      title: 'Empty message',
-      description: 'Message displayed when the source returns no items.',
-      default: 'Sin contenido disponible',
-      minLength: 1,
-      'x-translatable': true,
-    },
+    showTitle: SHOW_TITLE_SCHEMA,
+    emptyMessage: emptyMessageSchema('Sin contenido disponible'),
     cardHeight: {
       type: 'number',
       title: 'Card height',
@@ -450,6 +453,579 @@ const COMIC_PANEL_SCHEMA: WidgetSchema = {
       limit: 10,
     }),
     headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+function charactersDataBindingSchema(defaultValue: Record<string, unknown>): WidgetSchema {
+  return {
+    type: 'object',
+    title: 'Data source',
+    description: 'Character items are filled automatically.',
+    default: defaultValue,
+    required: ['source'],
+    additionalProperties: true,
+    'x-control': 'data-binding',
+    properties: {
+      source: {
+        type: 'string',
+        title: 'Source',
+        enum: ['characters'],
+      },
+      limit: {
+        type: 'number',
+        title: 'Limit',
+        minimum: 1,
+        'x-binding-sources': ['characters'],
+      },
+    },
+  };
+}
+
+const AVATAR_ROW_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['title', 'emptyMessage', 'data_binding'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    title: {
+      type: 'string',
+      title: 'Title',
+      default: 'Acerca de Mí',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    emptyMessage: emptyMessageSchema('Sin personajes'),
+    data_binding: charactersDataBindingSchema({ source: 'characters', limit: 14 }),
+    headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+const GRID_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['title', 'emptyMessage', 'data_binding'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    title: {
+      type: 'string',
+      title: 'Title',
+      default: 'PERSONAJES',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    subtitle: {
+      type: 'string',
+      title: 'Subtitle',
+      'x-translatable': true,
+    },
+    columns: {
+      type: 'number',
+      title: 'Columns',
+      default: 2,
+      minimum: 1,
+    },
+    emptyMessage: emptyMessageSchema('Sin personajes disponibles'),
+    data_binding: charactersDataBindingSchema({ source: 'characters' }),
+    headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+const COMIC_LIST_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['variant', 'emptyMessage', 'data_binding'],
+  properties: {
+    key: {
+      ...WIDGET_KEY_SCHEMA,
+      description: 'Stable key required when this list is targeted by Filter Chips.',
+    },
+    variant: {
+      type: 'string',
+      title: 'Variant',
+      default: 'tile',
+      enum: ['tile', 'row'],
+    },
+    title: {
+      type: 'string',
+      title: 'Title',
+      'x-translatable': true,
+    },
+    showTitle: SHOW_TITLE_SCHEMA,
+    subtitle: {
+      type: 'string',
+      title: 'Subtitle',
+      'x-translatable': true,
+    },
+    columns: {
+      type: 'number',
+      title: 'Columns',
+      description: 'Used by the tile variant.',
+      default: 2,
+      minimum: 1,
+    },
+    emptyMessage: emptyMessageSchema('Sin resultados'),
+    data_binding: {
+      type: 'object',
+      title: 'Data source',
+      description: 'Select the live source that fills list items.',
+      default: { source: 'comics' },
+      required: ['source'],
+      additionalProperties: true,
+      'x-control': 'data-binding',
+      properties: {
+        source: {
+          type: 'string',
+          title: 'Source',
+          enum: ['comics', 'container', 'wishlist'],
+        },
+        containerId: {
+          type: 'string',
+          title: 'Container ID',
+          description: 'Optional for comics; required for a fixed container.',
+          'x-binding-sources': ['comics', 'container'],
+          'x-required-for-sources': ['container'],
+        },
+        limit: {
+          type: 'number',
+          title: 'Limit',
+          minimum: 1,
+          'x-binding-sources': ['comics', 'container'],
+        },
+      },
+    },
+    headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+const CATEGORY_LIST_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['data_binding'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    sectionTitle: {
+      type: 'string',
+      title: 'Section title',
+      default: 'SERIES',
+      'x-translatable': true,
+    },
+    data_binding: {
+      type: 'object',
+      title: 'Data source',
+      description: 'Collection category items are filled automatically.',
+      default: { source: 'collection_categories' },
+      required: ['source'],
+      additionalProperties: true,
+      'x-control': 'data-binding',
+      properties: {
+        source: {
+          type: 'string',
+          title: 'Source',
+          enum: ['collection_categories'],
+        },
+      },
+    },
+  },
+};
+
+const INLINE_PDF_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['data_binding'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    title: {
+      type: 'string',
+      title: 'Title',
+      default: 'Tira del Día',
+      'x-translatable': true,
+    },
+    showTitle: SHOW_TITLE_SCHEMA,
+    data_binding: {
+      type: 'object',
+      title: 'Data source',
+      description: 'The PDF preview, aspect ratio and tap action are filled automatically.',
+      default: { source: 'latest_strip' },
+      required: ['source'],
+      additionalProperties: true,
+      'x-control': 'data-binding',
+      properties: {
+        source: {
+          type: 'string',
+          title: 'Source',
+          enum: ['latest_strip'],
+        },
+        containerId: {
+          type: 'string',
+          title: 'Pulsar section reference',
+          description: 'Optional. The app uses the daily-strip default when omitted.',
+          'x-binding-sources': ['latest_strip'],
+        },
+      },
+    },
+    headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+const STATIC_ITEM_ACTION_SCHEMA: WidgetSchema = {
+  type: 'object',
+  title: 'Tap action',
+  description: 'Optional action triggered when this item is pressed.',
+  required: ['type'],
+  additionalProperties: true,
+  'x-control': 'action',
+  'x-optional': true,
+  properties: {
+    type: {
+      type: 'string',
+      title: 'Type',
+      default: 'navigate',
+      enum: ['navigate', 'open_webview', 'premium_gate'],
+    },
+    route: {
+      type: 'string',
+      title: 'Route',
+      default: '/colecciones',
+    },
+    url: {
+      type: 'string',
+      title: 'URL',
+    },
+  },
+};
+
+const HORIZONTAL_CAROUSEL_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['emptyMessage', 'data_binding'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    title: {
+      type: 'string',
+      title: 'Title',
+      default: 'Galería',
+      'x-translatable': true,
+    },
+    showTitle: SHOW_TITLE_SCHEMA,
+    emptyMessage: emptyMessageSchema('Sin imágenes'),
+    cardWidth: {
+      type: 'number',
+      title: 'Card width',
+      default: 240,
+      exclusiveMinimum: 0,
+    },
+    cardHeight: {
+      type: 'number',
+      title: 'Card height',
+      default: 160,
+      exclusiveMinimum: 0,
+    },
+    data_binding: {
+      type: 'object',
+      title: 'Data source',
+      description: 'Static items are stored directly in the section configuration.',
+      default: {
+        source: 'static',
+        items: [{ key: '0', imageUrl: 'https://example.com/image.jpg' }],
+      },
+      required: ['source'],
+      additionalProperties: true,
+      'x-control': 'data-binding',
+      properties: {
+        source: {
+          type: 'string',
+          title: 'Source',
+          enum: ['static'],
+        },
+        items: {
+          type: 'array',
+          title: 'Items',
+          minItems: 1,
+          'x-binding-sources': ['static'],
+          'x-required-for-sources': ['static'],
+          items: {
+            type: 'object',
+            title: 'Carousel item',
+            required: ['key', 'imageUrl'],
+            additionalProperties: true,
+            properties: {
+              key: {
+                type: 'string',
+                title: 'Key',
+                default: 'new-item',
+                minLength: 1,
+              },
+              imageUrl: {
+                type: 'string',
+                title: 'Image URL',
+                default: 'https://example.com/image.jpg',
+                minLength: 1,
+              },
+              action: STATIC_ITEM_ACTION_SCHEMA,
+            },
+          },
+        },
+      },
+    },
+    headerAction: HEADER_ACTION_SCHEMA,
+  },
+};
+
+const CTA_ACTION_SCHEMA: WidgetSchema = {
+  type: 'object',
+  title: 'Call to action',
+  required: ['type'],
+  additionalProperties: true,
+  'x-control': 'action',
+  default: { type: 'navigate', route: '/colecciones' },
+  properties: {
+    type: {
+      type: 'string',
+      title: 'Type',
+      enum: ['navigate', 'show_subscription', 'premium_gate'],
+    },
+    route: {
+      type: 'string',
+      title: 'Route',
+    },
+  },
+};
+
+const BANNER_ASSETS_SCHEMA: WidgetSchema = {
+  type: 'object',
+  title: 'Banner assets',
+  description: 'Optional bundled artwork selected by stable registry key.',
+  additionalProperties: true,
+  'x-optional': true,
+  properties: {
+    pattern: {
+      type: 'string',
+      title: 'Background pattern',
+      default: 'pattern_banner',
+      enum: ['pattern_banner', 'pattern_banner2'],
+    },
+    character: {
+      type: 'string',
+      title: 'Character artwork',
+      default: 'condorito-1',
+      enum: ['condorito-1', 'banner2-condorito', 'subscription-condorito'],
+    },
+    topImage: {
+      type: 'string',
+      title: 'Subscription top image',
+      description: 'Used by the subscription variant. Select none to hide it.',
+      enum: ['subscribe-banner-comics', 'none'],
+    },
+  },
+};
+
+const BANNER_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['backgroundColor', 'title', 'ctaLabel', 'ctaAction'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    variant: {
+      type: 'string',
+      title: 'Layout variant',
+      default: 'columns',
+      enum: ['columns', 'stacked', 'subscription'],
+    },
+    assets: BANNER_ASSETS_SCHEMA,
+    backgroundColor: {
+      type: 'string',
+      title: 'Background color',
+      default: '#E8452D',
+      minLength: 1,
+    },
+    title: {
+      type: 'string',
+      title: 'Title',
+      default: '¡Nuevo!',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    subtitle: {
+      type: 'string',
+      title: 'Subtitle',
+      description: 'Supporting text, or the first label in the columns variant.',
+      'x-translatable': true,
+    },
+    subtitle2: {
+      type: 'string',
+      title: 'Second column label',
+      description: 'Used only by the columns variant.',
+      'x-translatable': true,
+    },
+    ctaLabel: {
+      type: 'string',
+      title: 'Button label',
+      default: 'Ver más',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    ctaAction: CTA_ACTION_SCHEMA,
+    audience: AUDIENCE_SCHEMA,
+  },
+};
+
+const UPSELL_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['headline', 'subtitle', 'ctaLabel', 'ctaAction'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    headline: {
+      type: 'string',
+      title: 'Headline',
+      default: 'Hazte premium',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    subtitle: {
+      type: 'string',
+      title: 'Subtitle',
+      default: 'Accede a todo el contenido',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    ctaLabel: {
+      type: 'string',
+      title: 'Button label',
+      default: 'Suscríbete',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    ctaAction: {
+      ...CTA_ACTION_SCHEMA,
+      default: { type: 'show_subscription' },
+    },
+    condition: {
+      type: 'string',
+      title: 'Visibility condition',
+      description: 'Hides this widget from premium subscribers.',
+      default: 'not_premium',
+      enum: ['not_premium'],
+    },
+  },
+};
+
+const SCREEN_HEADER_RIGHT_ACTION_SCHEMA: WidgetSchema = {
+  type: 'object',
+  title: 'Right action',
+  description: 'Optional trailing action. Favorites may replace it with its edit control.',
+  required: ['label', 'action'],
+  additionalProperties: true,
+  'x-optional': true,
+  properties: {
+    label: {
+      type: 'string',
+      title: 'Label',
+      default: 'Ver todo',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    icon: {
+      type: 'string',
+      title: 'Icon',
+      enum: ['trash', 'close'],
+    },
+    action: {
+      ...CTA_ACTION_SCHEMA,
+      default: { type: 'navigate', route: '/colecciones' },
+    },
+  },
+};
+
+const SCREEN_HEADER_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['title'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    title: {
+      type: 'string',
+      title: 'Title',
+      default: 'COLECCIONES',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    subtitle: {
+      type: 'string',
+      title: 'Subtitle',
+      'x-translatable': true,
+    },
+    showBack: {
+      type: 'boolean',
+      title: 'Show back button',
+      default: false,
+    },
+    backRoute: {
+      type: 'string',
+      title: 'Back route',
+      description: 'Optional fallback route for the back action.',
+    },
+    rightAction: SCREEN_HEADER_RIGHT_ACTION_SCHEMA,
+    audience: AUDIENCE_SCHEMA,
+  },
+};
+
+const SEARCH_BAR_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['placeholder', 'resultsRoute'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    placeholder: {
+      type: 'string',
+      title: 'Placeholder',
+      default: 'Busca…',
+      minLength: 1,
+      'x-translatable': true,
+    },
+    resultsRoute: {
+      type: 'string',
+      title: 'Results route',
+      description: 'Base route; the app appends the encoded search query.',
+      default: '/colecciones/search',
+      minLength: 1,
+    },
+  },
+};
+
+const PDF_READER_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: ['title', 'pdfUrl'],
+  properties: {
+    key: WIDGET_KEY_SCHEMA,
+    title: {
+      type: 'string',
+      title: 'Title',
+      default: 'Revista',
+      minLength: 1,
+    },
+    pdfUrl: {
+      type: 'string',
+      title: 'PDF URL',
+      default: 'https://example.com/comic.pdf',
+      minLength: 1,
+    },
+    issueNumber: {
+      type: 'number',
+      title: 'Issue number',
+      minimum: 1,
+    },
+    year: {
+      type: 'number',
+      title: 'Publication year',
+      minimum: 1,
+    },
+    cmsId: {
+      type: 'string',
+      title: 'CMS content ID',
+      description: 'Used for reading progress and wishlist integration.',
+    },
   },
 };
 
@@ -553,8 +1129,8 @@ export const DATA_SOURCES: SourceDoc[] = [
   { source: 'jokes', description: 'Jokes / editions.', params: 'limit?, containerId?, freeOnly?, title?', fills: 'items' },
   {
     source: 'characters',
-    description: 'Character profiles. itemAction controls whether a tap navigates or opens the detail sheet.',
-    params: 'limit?, itemAction? (navigate | show_detail), route? (navigate only)',
+    description: 'Character profiles. Tap behavior is fixed by the widget type.',
+    params: 'limit?',
     fills: 'items',
   },
   { source: 'container', description: 'Resolves a fixed container and returns its comics or jokes by content type.', params: 'containerId (required), limit?', fills: 'items' },
@@ -565,8 +1141,9 @@ export const DATA_SOURCES: SourceDoc[] = [
     fills: 'items',
   },
   { source: 'collection_categories', description: 'Collection category tiles.', params: '—', fills: 'items' },
-  { source: 'latest_strip', description: 'Latest “tira del día”; fills the PDF fields of an inline-pdf.', params: 'freeOnly?', fills: 'pdfUrl, aspectRatio, action' },
+  { source: 'latest_strip', description: 'Latest “tira del día”; fills the preview fields of an inline-pdf.', params: 'containerId?', fills: 'pdfUrl, imageUrl, aspectRatio, action' },
   { source: 'static', description: 'Use the items you provide verbatim in the config.', params: 'items[]', fills: 'items' },
+  { source: 'wishlist', description: 'The signed-in user’s saved comics and jokes.', params: '—', fills: 'items' },
 ];
 
 export const WIDGETS: WidgetDoc[] = [
@@ -630,17 +1207,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Round character avatars with names.',
     binding: 'items',
     sources: ['characters'],
-    example: {
-      i18n: { title: 'home.acerca_de_mi' },
-      title: 'Acerca de Mí',
-      emptyMessage: 'Sin personajes',
-      data_binding: {
-        source: 'characters',
-        limit: 14,
-        itemAction: 'navigate',
-        route: '/personajes',
-      },
-    },
+    schema: AVATAR_ROW_SCHEMA,
+    example: defaultsFromSchema(AVATAR_ROW_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'grid',
@@ -648,26 +1216,17 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Grid of items; when bound to characters shows a tappable detail.',
     binding: 'items',
     sources: ['characters'],
-    example: {
-      i18n: { title: 'personajes.titulo' },
-      title: 'PERSONAJES',
-      columns: 2,
-      emptyMessage: 'Sin personajes disponibles',
-      data_binding: { source: 'characters', itemAction: 'show_detail' },
-    },
+    schema: GRID_SCHEMA,
+    example: defaultsFromSchema(GRID_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'comic-list',
     label: 'Comic list',
     description: 'Tile or row list of comics (with titles).',
     binding: 'items',
-    sources: ['comics', 'container'],
-    example: {
-      variant: 'tile',
-      columns: 2,
-      emptyMessage: 'Sin resultados',
-      data_binding: { source: 'comics' },
-    },
+    sources: ['comics', 'container', 'wishlist'],
+    schema: COMIC_LIST_SCHEMA,
+    example: defaultsFromSchema(COMIC_LIST_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'category-list',
@@ -675,11 +1234,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Collection category tiles (series, etc.).',
     binding: 'items',
     sources: ['collection_categories'],
-    example: {
-      i18n: { sectionTitle: 'colecciones.series' },
-      sectionTitle: 'SERIES',
-      data_binding: { source: 'collection_categories' },
-    },
+    schema: CATEGORY_LIST_SCHEMA,
+    example: defaultsFromSchema(CATEGORY_LIST_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'inline-pdf',
@@ -687,11 +1243,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Inline PDF preview (tira del día) that opens the reader on tap.',
     binding: 'special',
     sources: ['latest_strip'],
-    example: {
-      i18n: { title: 'home.tira_del_dia' },
-      title: 'Tira del Día',
-      data_binding: { source: 'latest_strip', freeOnly: true },
-    },
+    schema: INLINE_PDF_SCHEMA,
+    example: defaultsFromSchema(INLINE_PDF_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'horizontal-carousel',
@@ -699,13 +1252,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Generic image rail (e.g. static panels).',
     binding: 'items',
     sources: ['static'],
-    example: {
-      title: 'Galería',
-      emptyMessage: 'Sin imágenes',
-      cardWidth: 240,
-      cardHeight: 160,
-      data_binding: { source: 'static', items: [{ key: '0', imageUrl: 'https://…' }] },
-    },
+    schema: HORIZONTAL_CAROUSEL_SCHEMA,
+    example: defaultsFromSchema(HORIZONTAL_CAROUSEL_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'banner',
@@ -713,14 +1261,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Promotional banner with a title and call-to-action. Use audience to limit who sees it.',
     binding: 'none',
     sources: [],
-    example: {
-      backgroundColor: '#E8452D',
-      audience: 'all',
-      i18n: { title: 'home.banner_title', ctaLabel: 'common.ver_mas' },
-      title: '¡Nuevo!',
-      ctaLabel: 'Ver más',
-      ctaAction: { type: 'navigate', route: '/colecciones' },
-    },
+    schema: BANNER_SCHEMA,
+    example: defaultsFromSchema(BANNER_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'upsell',
@@ -728,13 +1270,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Subscription upsell; hidden automatically for premium users.',
     binding: 'none',
     sources: [],
-    example: {
-      headline: 'Hazte premium',
-      subtitle: 'Accede a todo el contenido',
-      ctaLabel: 'Suscríbete',
-      ctaAction: { type: 'show_subscription' },
-      condition: 'not_premium',
-    },
+    schema: UPSELL_SCHEMA,
+    example: defaultsFromSchema(UPSELL_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'screen-header',
@@ -742,12 +1279,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Simple title/subtitle header.',
     binding: 'none',
     sources: [],
-    example: {
-      i18n: {
-        title: 'colecciones.titulo'
-      },
-      title: 'COLECCIONES'
-    },
+    schema: SCREEN_HEADER_SCHEMA,
+    example: defaultsFromSchema(SCREEN_HEADER_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'detail-header',
@@ -764,7 +1297,8 @@ export const WIDGETS: WidgetDoc[] = [
     description: 'Search input that routes to a results screen.',
     binding: 'none',
     sources: [],
-    example: { i18n: { placeholder: 'colecciones.buscar' }, placeholder: 'Busca…', resultsRoute: '/colecciones/search' },
+    schema: SEARCH_BAR_SCHEMA,
+    example: defaultsFromSchema(SEARCH_BAR_SCHEMA) as Record<string, unknown>,
   },
   {
     type: 'filter-chips',
@@ -778,21 +1312,20 @@ export const WIDGETS: WidgetDoc[] = [
   {
     type: 'footer',
     label: 'Footer',
-    description: 'Footer links and copyright.',
+    description: 'Runtime-managed footer. Only section order and activation are editable here.',
     binding: 'none',
     sources: [],
-    example: {
-      items: [{ key: 'terms', label: 'Términos', action: { type: 'navigate', route: '/document?slug=cgu' } }],
-      copyright: '2024 Condorito.',
-    },
+    editor: 'runtime-managed',
+    example: {},
   },
   {
     type: 'pdf-reader',
     label: 'PDF reader',
-    description: 'Embedded PDF reader for a specific comic.',
+    description: 'Embedded PDF reader consumed only on comic-detail screens.',
     binding: 'none',
     sources: [],
-    example: { title: 'Revista', pdfUrl: 'https://…', issueNumber: 1, year: 2024 },
+    schema: PDF_READER_SCHEMA,
+    example: defaultsFromSchema(PDF_READER_SCHEMA) as Record<string, unknown>,
   },
 ];
 

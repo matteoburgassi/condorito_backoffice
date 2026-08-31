@@ -98,16 +98,26 @@ export function optionalObjectDefaults(schema: WidgetSchema): SchemaFormValue {
   return result;
 }
 
-export function changeDataBindingSource(value: unknown, source: string): SchemaFormValue {
+export function bindingPropertyApplies(schema: WidgetSchema, source: string): boolean {
+  return !schema['x-binding-sources'] || schema['x-binding-sources'].includes(source);
+}
+
+export function changeDataBindingSource(
+  value: unknown,
+  source: string,
+  schema?: WidgetSchema,
+): SchemaFormValue {
   const next: SchemaFormValue = { ...asRecord(value), source };
-  if (source === 'continue_reading') {
-    delete next.containerId;
-    delete next.limit;
-    delete next.freeOnly;
-    delete next.title;
+  if (schema) {
+    for (const [key, property] of Object.entries(schema.properties ?? {})) {
+      if (key !== 'source' && !bindingPropertyApplies(property, source)) {
+        delete next[key];
+      }
+    }
+  } else if (source === 'continue_reading') {
+    for (const key of ['containerId', 'limit', 'freeOnly', 'title']) delete next[key];
   } else if (source === 'comics' || source === 'container') {
-    delete next.freeOnly;
-    delete next.title;
+    for (const key of ['freeOnly', 'title']) delete next[key];
   }
   return next;
 }
@@ -140,6 +150,35 @@ function Field({
   const error = errors[fieldPath];
 
   if (schema.type === 'object') {
+    if (path.length > 0 && schema['x-optional']) {
+      const enabled = value !== null && typeof value === 'object' && !Array.isArray(value);
+      const enabledSchema = { ...schema };
+      delete enabledSchema['x-optional'];
+      return (
+        <div className="field">
+          <Switch
+            checked={enabled}
+            onChange={(checked) => onChange(
+              path,
+              checked ? optionalObjectDefaults(schema) : undefined,
+            )}
+            label={`Enable ${label}`}
+          />
+          {schema.description && <div className="field-hint">{schema.description}</div>}
+          {enabled && (
+            <Field
+              schema={enabledSchema}
+              path={path}
+              value={value}
+              onChange={onChange}
+              errors={errors}
+              required={required}
+            />
+          )}
+        </div>
+      );
+    }
+
     if (schema['x-control'] === 'data-binding') {
       const binding = asRecord(value);
       const properties = schema.properties ?? {};
@@ -152,6 +191,9 @@ function Field({
         : typeof schemaDefault.source === 'string'
           ? schemaDefault.source
           : firstSource ?? '';
+      const parameterEntries = Object.entries(properties).filter(
+        ([key, property]) => key !== 'source' && bindingPropertyApplies(property, source),
+      );
       return (
         <fieldset className="field">
           <legend>{label}</legend>
@@ -163,7 +205,7 @@ function Field({
               value={source}
               onChange={(sourcePath, nextSource) => {
                 if (typeof nextSource === 'string') {
-                  onChange(path, changeDataBindingSource(binding, nextSource));
+                  onChange(path, changeDataBindingSource(binding, nextSource, schema));
                 } else {
                   onChange(sourcePath, nextSource);
                 }
@@ -172,54 +214,24 @@ function Field({
               required
             />
           )}
-          {(source === 'comics' || source === 'container' || source === 'jokes') && properties.containerId && (
+          {parameterEntries.map(([key, property]) => (
             <Field
-              schema={{
-                ...properties.containerId,
-                description: source === 'container'
-                  ? 'Required fixed container identifier.'
-                  : source === 'comics'
-                    ? 'Optional. Leave empty to use the current screen slug.'
-                    : 'Optional. Leave empty to include all configured joke sections.',
-              }}
-              path={[...path, 'containerId']}
-              value={binding.containerId}
+              key={key}
+              schema={property}
+              path={[...path, key]}
+              value={binding[key]}
               onChange={onChange}
               errors={errors}
-              required={source === 'container'}
+              required={property['x-required-for-sources']?.includes(source)}
             />
-          )}
-          {(source === 'comics' || source === 'container' || source === 'jokes') && properties.limit && (
-            <Field
-              schema={properties.limit}
-              path={[...path, 'limit']}
-              value={binding.limit}
-              onChange={onChange}
-              errors={errors}
-            />
-          )}
-          {source === 'jokes' && properties.freeOnly && (
-            <Field
-              schema={properties.freeOnly}
-              path={[...path, 'freeOnly']}
-              value={binding.freeOnly}
-              onChange={onChange}
-              errors={errors}
-            />
-          )}
-          {source === 'jokes' && properties.title && (
-            <Field
-              schema={properties.title}
-              path={[...path, 'title']}
-              value={binding.title}
-              onChange={onChange}
-              errors={errors}
-            />
-          )}
+          ))}
           {source === 'continue_reading' && (
             <div className="field-hint">
               Uses the signed-in user’s saved progress; no source parameters are required.
             </div>
+          )}
+          {source !== 'continue_reading' && parameterEntries.length === 0 && (
+            <div className="field-hint">This source has no additional parameters.</div>
           )}
         </fieldset>
       );
@@ -298,23 +310,6 @@ function Field({
     );
 
     if (path.length === 0) return <div>{content}</div>;
-    if (schema['x-optional']) {
-      const enabled = value !== null && typeof value === 'object' && !Array.isArray(value);
-      return (
-        <div className="field">
-          <Switch
-            checked={enabled}
-            onChange={(checked) => onChange(
-              path,
-              checked ? optionalObjectDefaults(schema) : undefined,
-            )}
-            label={`Enable ${label}`}
-          />
-          {schema.description && <div className="field-hint">{schema.description}</div>}
-          {enabled && <fieldset style={{ marginTop: 8 }}>{content}</fieldset>}
-        </div>
-      );
-    }
     return (
       <fieldset className="field">
         <legend>{label}</legend>
