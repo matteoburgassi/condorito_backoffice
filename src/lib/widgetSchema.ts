@@ -57,15 +57,71 @@ export function validateWidgetConfig(
   }
 
   function validateControls(currentSchema: WidgetSchema, value: unknown, path: string) {
+    if (currentSchema.type === 'array') {
+      const itemSchema = currentSchema.items;
+      if (Array.isArray(value) && currentSchema['x-validate'] === 'filter-chip-items') {
+        const seenKeys = new Set<string>();
+        let hasSelectedItem = false;
+        value.forEach((item, index) => {
+          const record = asWidgetConfig(item);
+          if (typeof record.key === 'string') {
+            if (seenKeys.has(record.key)) {
+              errors[`${path}.${index}.key`] = 'must be unique within this filter row';
+            }
+            seenKeys.add(record.key);
+          }
+          if (record.selected === true) {
+            if (hasSelectedItem) {
+              errors[`${path}.${index}.selected`] = 'only one filter can be initially selected';
+            }
+            hasSelectedItem = true;
+          }
+        });
+      }
+      if (Array.isArray(value) && itemSchema) {
+        value.forEach((item, index) => {
+          validateControls(
+            itemSchema,
+            item,
+            path ? `${path}.${index}` : String(index),
+          );
+        });
+      }
+      return;
+    }
     if (currentSchema.type !== 'object' || value === null || typeof value !== 'object' || Array.isArray(value)) {
       return;
     }
     const record = value as WidgetConfig;
+    if (currentSchema['x-validate'] === 'filter-spec' && record.kind === 'decade') {
+      const fromPath = `${path}.from`.replace(/^\./, '');
+      const toPath = `${path}.to`.replace(/^\./, '');
+      if (typeof record.from !== 'number' || !Number.isFinite(record.from)) {
+        errors[fromPath] = 'is required for decade filters';
+      }
+      if (typeof record.to !== 'number' || !Number.isFinite(record.to)) {
+        errors[toPath] = 'is required for decade filters';
+      }
+      if (
+        typeof record.from === 'number'
+        && typeof record.to === 'number'
+        && record.from > record.to
+      ) {
+        errors[fromPath] = 'must be less than or equal to the ending year';
+      }
+    }
     if (currentSchema['x-control'] === 'data-binding') {
-      if (record.source === 'container' && (
-        typeof record.containerId !== 'string' || record.containerId.trim() === ''
-      )) {
-        errors[`${path}.containerId`.replace(/^\./, '')] = 'is required for the container source';
+      const source = typeof record.source === 'string' ? record.source : '';
+      for (const [key, property] of Object.entries(currentSchema.properties ?? {})) {
+        if (!property['x-required-for-sources']?.includes(source)) continue;
+        const fieldValue = record[key];
+        const isMissing = fieldValue === undefined
+          || fieldValue === null
+          || (typeof fieldValue === 'string' && fieldValue.trim() === '')
+          || (Array.isArray(fieldValue) && fieldValue.length === 0);
+        if (isMissing) {
+          errors[`${path}.${key}`.replace(/^\./, '')] = `is required for the ${source} source`;
+        }
       }
     }
     if (currentSchema['x-control'] === 'action') {

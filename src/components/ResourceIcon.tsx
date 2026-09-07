@@ -14,6 +14,7 @@ import {
   Palette,
   Menu,
   PanelBottom,
+  KeyRound,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -33,6 +34,7 @@ const MAP: Record<string, LucideIcon> = {
   palette: Palette,
   menu: Menu,
   'panel-bottom': PanelBottom,
+  'key-round': KeyRound,
 };
 
 export function ResourceIcon({ name, size = 17 }: { name: string; size?: number }) {

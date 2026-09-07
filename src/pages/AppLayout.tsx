@@ -48,6 +48,12 @@ export function AppLayout() {
                 {r.label}
               </NavLink>
             ))}
+            {group === 'Configuration' && (
+              <NavLink to="/login-methods" className="nav-item" onClick={close}>
+                <ResourceIcon name="key-round" />
+                Login Methods
+              </NavLink>
+            )}
           </div>
         ))}
       </aside>
