@@ -143,13 +143,14 @@ export function HelpPage() {
         <h2>Character tap behavior</h2>
         <p>
           Character detail is an overlay opened by <Code>show_detail</Code>, not a screen section type.
-          Configure the action on each character-bound section so the same avatar widget can behave differently by screen.
+          Tap behavior is currently fixed by widget type: Avatar Row navigates to Personajes,
+          while Grid opens the character detail sheet.
         </p>
         <div className="card doc-card">
-          <p style={{ marginBottom: 4 }}><strong>Home:</strong> navigate to the Personajes screen.</p>
-          <Json value={{ data_binding: { source: 'characters', limit: 14, itemAction: 'navigate', route: '/personajes' } }} />
-          <p style={{ margin: '14px 0 4px' }}><strong>Personajes:</strong> open the selected character’s detail sheet.</p>
-          <Json value={{ data_binding: { source: 'characters', itemAction: 'show_detail' } }} />
+          <p style={{ marginBottom: 4 }}>
+            The only configurable binding parameter is the optional item limit.
+          </p>
+          <Json value={{ data_binding: { source: 'characters', limit: 14 } }} />
         </div>
       </div>
 
