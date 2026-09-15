@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildMsisdnRegexUpdate,
   buildSignupUpdate,
+  getMsisdnRegex,
   loginMethodLabel,
   validateEnabledChange,
+  validateMsisdnRegex,
   type LoginMethodRow,
 } from '../src/lib/loginMethods';
 
@@ -33,6 +36,61 @@ describe('login method configuration helpers', () => {
         allow_forgot_password: true,
         custom: 'preserved',
         allow_signup: false,
+      },
+    });
+  });
+
+  it('reads a configured MSISDN regex', () => {
+    expect(
+      getMsisdnRegex(method({ config: { msisdn_regex: '^\\+56[0-9]+$' } })),
+    ).toBe('^\\+56[0-9]+$');
+    expect(getMsisdnRegex(method({ config: null }))).toBe('');
+  });
+
+  it('validates an MSISDN regex with its configured flags', () => {
+    const phoneMethod = method({ config: { msisdn_regex_flags: 'i' } });
+
+    expect(validateMsisdnRegex('^\\+[0-9]+$', phoneMethod)).toBeNull();
+    expect(validateMsisdnRegex('', phoneMethod)).toBeNull();
+    expect(validateMsisdnRegex('[', phoneMethod)).toBe(
+      'Enter a valid regular expression.',
+    );
+    expect(
+      validateMsisdnRegex('^\\+[0-9]+$', method({ config: { msisdn_regex_flags: '[' } })),
+    ).toBe('Enter a valid regular expression.');
+  });
+
+  it('updates the MSISDN regex without losing advanced configuration', () => {
+    const phoneMethod = method({
+      config: {
+        msisdn_regex: '^old$',
+        msisdn_regex_flags: 'i',
+        msisdn_min_length: 9,
+      },
+    });
+
+    expect(buildMsisdnRegexUpdate(phoneMethod, '^\\+[1-9][0-9]{7,14}$')).toEqual({
+      config: {
+        msisdn_regex: '^\\+[1-9][0-9]{7,14}$',
+        msisdn_regex_flags: 'i',
+        msisdn_min_length: 9,
+      },
+    });
+  });
+
+  it('removes an empty MSISDN regex while preserving other configuration', () => {
+    const phoneMethod = method({
+      config: {
+        msisdn_regex: '^old$',
+        msisdn_regex_flags: '',
+        custom: 'preserved',
+      },
+    });
+
+    expect(buildMsisdnRegexUpdate(phoneMethod, '   ')).toEqual({
+      config: {
+        msisdn_regex_flags: '',
+        custom: 'preserved',
       },
     });
   });

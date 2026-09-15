@@ -3,9 +3,12 @@ import { ShieldCheck } from 'lucide-react';
 import { Spinner } from '../components/Spinner';
 import { Switch } from '../components/Switch';
 import {
+  buildMsisdnRegexUpdate,
   buildSignupUpdate,
+  getMsisdnRegex,
   loginMethodLabel,
   validateEnabledChange,
+  validateMsisdnRegex,
   type LoginMethodRow,
 } from '../lib/loginMethods';
 import { useProduct } from '../lib/ProductContext';
@@ -15,6 +18,7 @@ export function LoginMethodsPage() {
   const { productId, current } = useProduct();
   const [methods, setMethods] = useState<LoginMethodRow[]>([]);
   const [orderDrafts, setOrderDrafts] = useState<Record<string, string>>({});
+  const [regexDrafts, setRegexDrafts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +27,8 @@ export function LoginMethodsPage() {
   const load = useCallback(async () => {
     if (!productId) {
       setMethods([]);
+      setOrderDrafts({});
+      setRegexDrafts({});
       setLoading(false);
       return;
     }
@@ -44,6 +50,9 @@ export function LoginMethodsPage() {
       setOrderDrafts(
         Object.fromEntries(rows.map((method) => [method.id, String(method.order ?? 0)])),
       );
+      setRegexDrafts(
+        Object.fromEntries(rows.map((method) => [method.id, getMsisdnRegex(method)])),
+      );
     }
     setLoading(false);
   }, [productId]);
@@ -57,7 +66,7 @@ export function LoginMethodsPage() {
     method: LoginMethodRow,
     values: Partial<LoginMethodRow>,
     message: string,
-  ) => {
+  ): Promise<boolean> => {
     setSavingId(method.id);
     setError(null);
     setSuccess(null);
@@ -69,9 +78,9 @@ export function LoginMethodsPage() {
     setSavingId(null);
 
     if (updateError) {
-      setError(updateError.message);
       await load();
-      return;
+      setError(updateError.message);
+      return false;
     }
 
     setMethods((currentMethods) =>
@@ -80,6 +89,7 @@ export function LoginMethodsPage() {
       ),
     );
     setSuccess(message);
+    return true;
   };
 
   const changeEnabled = async (method: LoginMethodRow, enabled: boolean) => {
@@ -142,6 +152,23 @@ export function LoginMethodsPage() {
     }
     if (order === method.order) return;
     await updateMethod(method, { order }, `${loginMethodLabel(method.type)} order updated.`);
+  };
+
+  const saveRegex = async (method: LoginMethodRow) => {
+    const pattern = regexDrafts[method.id] ?? '';
+    const validationError = validateMsisdnRegex(pattern, method);
+    if (validationError) {
+      setError(validationError);
+      setSuccess(null);
+      return;
+    }
+    if (pattern === getMsisdnRegex(method)) return;
+
+    await updateMethod(
+      method,
+      buildMsisdnRegexUpdate(method, pattern),
+      `${loginMethodLabel(method.type)} regex updated.`,
+    );
   };
 
   return (
@@ -254,6 +281,37 @@ export function LoginMethodsPage() {
                           aria-label={`${loginMethodLabel(method.type)} order`}
                         />
                       </div>
+
+                      {(method.type.startsWith('msisdn') ||
+                        method.config?.identifier_kind === 'msisdn') && (
+                        <div className="login-method-control login-method-regex-control">
+                          <div>
+                            <strong>Phone number regex</strong>
+                            <span>
+                              JavaScript regular expression used to validate mobile numbers.
+                              Leave empty to use the app default.
+                            </span>
+                          </div>
+                          <input
+                            className="login-method-regex"
+                            type="text"
+                            value={regexDrafts[method.id] ?? ''}
+                            disabled={saving}
+                            spellCheck={false}
+                            onChange={(event) =>
+                              setRegexDrafts((drafts) => ({
+                                ...drafts,
+                                [method.id]: event.target.value,
+                              }))
+                            }
+                            onBlur={() => void saveRegex(method)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') event.currentTarget.blur();
+                            }}
+                            aria-label={`${loginMethodLabel(method.type)} phone number regex`}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     <details className="login-method-advanced">

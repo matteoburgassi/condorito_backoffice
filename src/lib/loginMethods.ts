@@ -33,6 +33,40 @@ export function buildSignupUpdate(
   };
 }
 
+export function getMsisdnRegex(method: Pick<LoginMethodRow, 'config'>): string {
+  const value = method.config?.msisdn_regex;
+  return typeof value === 'string' ? value : '';
+}
+
+export function validateMsisdnRegex(
+  pattern: string,
+  method: Pick<LoginMethodRow, 'config'>,
+): string | null {
+  if (!pattern.trim()) return null;
+
+  const configuredFlags = method.config?.msisdn_regex_flags;
+  const flags = typeof configuredFlags === 'string' ? configuredFlags : '';
+  try {
+    new RegExp(pattern, flags);
+    return null;
+  } catch {
+    return 'Enter a valid regular expression.';
+  }
+}
+
+export function buildMsisdnRegexUpdate(
+  method: Pick<LoginMethodRow, 'config'>,
+  pattern: string,
+): Pick<LoginMethodRow, 'config'> {
+  const config = { ...(method.config ?? {}) };
+  if (pattern.trim()) {
+    config.msisdn_regex = pattern;
+  } else {
+    delete config.msisdn_regex;
+  }
+  return { config };
+}
+
 export function validateEnabledChange(
   methods: LoginMethodRow[],
   methodId: string,
