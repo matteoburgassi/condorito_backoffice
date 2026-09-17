@@ -40,6 +40,55 @@ export function HelpPage() {
       </div>
 
       <div className="doc-section">
+        <h2>Microsoft sign-in</h2>
+        <p>
+          Admins can sign in with Microsoft Entra ID (Azure) or email/password. Signing in does{' '}
+          <strong>not</strong> grant access by itself — a row in <Code>admin_users</Code> is still required
+          (AccessGate shows the user id to copy).
+        </p>
+        <div className="card doc-card">
+          <p style={{ marginBottom: 8 }}><strong>1. Entra app registration</strong></p>
+          <ul style={{ margin: '0 0 14px', paddingLeft: 18, color: 'var(--text-muted)', fontSize: 13.5, lineHeight: 1.55 }}>
+            <li>Azure Portal → Microsoft Entra ID → App registrations → New registration.</li>
+            <li>
+              Redirect URI (Web):{' '}
+              <Code>https://&lt;project-ref&gt;.supabase.co/auth/v1/callback</Code>
+            </li>
+            <li>API permissions: <Code>openid</Code>, <Code>email</Code>, <Code>profile</Code>.</li>
+            <li>Create a client secret; note Application (client) ID and Directory (tenant) ID.</li>
+          </ul>
+          <p style={{ marginBottom: 8 }}><strong>2. Supabase Auth → Providers → Azure</strong></p>
+          <ul style={{ margin: '0 0 14px', paddingLeft: 18, color: 'var(--text-muted)', fontSize: 13.5, lineHeight: 1.55 }}>
+            <li>Enable Azure; paste client id, client secret, and tenant id.</li>
+            <li>
+              Prefer tenant <Code>organizations</Code> or a specific tenant — avoid <Code>common</Code> if
+              personal Microsoft accounts should be blocked.
+            </li>
+            <li>
+              Authentication → URL configuration: Site URL and Additional Redirect URLs = this backoffice
+              origin (e.g. <Code>https://your-backoffice.example</Code>).
+            </li>
+            <li>
+              Enable Automatic linking if existing password users share the same Microsoft email (avoids a
+              second <Code>auth.users</Code> id and a second admin grant).
+            </li>
+          </ul>
+          <p style={{ marginBottom: 8 }}><strong>3. Grant admin (manual)</strong></p>
+          <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.55 }}>
+            After the first Microsoft sign-in, the user sees AccessGate. Copy their user id, then run:
+          </p>
+          <Json
+            value={{
+              sql: "INSERT INTO admin_users (user_id) VALUES ('<uuid-from-access-gate>');",
+            }}
+          />
+          <p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'var(--text-faint)' }}>
+            They tap “Check again” on AccessGate after the insert. No domain auto-grant.
+          </p>
+        </div>
+      </div>
+
+      <div className="doc-section">
         <h2>Screens &amp; sections</h2>
         <p>
           A screen’s <Code>slug</Code> must match what the app requests. Valid slugs:{' '}

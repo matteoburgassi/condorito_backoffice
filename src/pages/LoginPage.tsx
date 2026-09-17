@@ -2,14 +2,27 @@ import { useState } from 'react';
 import { Loader as Loader2 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 
+/** Simple Microsoft logo mark for the SSO button. */
+function MicrosoftLogo({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
+
 export function LoginPage() {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithMicrosoft } = useAuth();
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [oauthBusy, setOauthBusy] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,6 +49,20 @@ export function LoginPage() {
     }
   };
 
+  const onMicrosoft = async () => {
+    setError(null);
+    setInfo(null);
+    setOauthBusy(true);
+    const { error } = await signInWithMicrosoft();
+    // On success the browser redirects to Microsoft; only clear busy on failure.
+    if (error) {
+      setOauthBusy(false);
+      setError(error);
+    }
+  };
+
+  const anyBusy = busy || oauthBusy;
+
   return (
     <div className="auth-wrap">
       <div className="auth-card">
@@ -49,6 +76,24 @@ export function LoginPage() {
 
         {error && <div className="alert alert-error">{error}</div>}
         {info && <div className="alert alert-info">{info}</div>}
+
+        {mode === 'signin' && (
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ width: '100%', justifyContent: 'center', gap: 10 }}
+              onClick={onMicrosoft}
+              disabled={anyBusy}
+            >
+              {oauthBusy ? <Loader2 className="spin" size={16} /> : <MicrosoftLogo />}
+              Sign in with Microsoft
+            </button>
+            <div className="auth-divider">
+              <span>or continue with email</span>
+            </div>
+          </>
+        )}
 
         <form onSubmit={submit}>
           <div className="field">
@@ -73,7 +118,7 @@ export function LoginPage() {
               placeholder="••••••••"
             />
           </div>
-          <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={busy}>
+          <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} disabled={anyBusy}>
             {busy && <Loader2 className="spin" size={16} />}
             {mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>

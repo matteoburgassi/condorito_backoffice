@@ -222,6 +222,15 @@ fieldset.field { padding: 8px; border: 1px solid var(--border); border-radius: v
 .auth-sub { color: var(--text-muted); font-size: 13.5px; margin-top: 2px; }
 .auth-switch { text-align: center; margin-top: 18px; font-size: 13px; color: var(--text-muted); }
 .auth-switch button { color: var(--primary); font-weight: 600; }
+.auth-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 18px 0; font-size: 12px; color: var(--text-faint); text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.auth-divider::before, .auth-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+.auth-divider span { white-space: nowrap; }
 
 .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; text-align: center; }
 .gate-box { max-width: 440px; }

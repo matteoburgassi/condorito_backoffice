@@ -9,6 +9,8 @@ type AuthState = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null }>;
+  /** Redirects to Microsoft Entra ID via Supabase's Azure provider. */
+  signInWithMicrosoft: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshAdmin: () => Promise<void>;
 };
@@ -68,6 +70,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error ? error.message : null };
   };
 
+  const signInWithMicrosoft: AuthState['signInWithMicrosoft'] = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        scopes: 'email profile openid',
+        redirectTo: window.location.origin,
+      },
+    });
+    return { error: error ? error.message : null };
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
@@ -78,7 +91,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user: session?.user ?? null, isAdmin, loading, signIn, signUp, signOut, refreshAdmin }}
+      value={{
+        session,
+        user: session?.user ?? null,
+        isAdmin,
+        loading,
+        signIn,
+        signUp,
+        signInWithMicrosoft,
+        signOut,
+        refreshAdmin,
+      }}
     >
       {children}
     </AuthContext.Provider>
