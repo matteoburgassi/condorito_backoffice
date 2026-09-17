@@ -14,6 +14,7 @@ import {
   BANNER_PRESETS,
   WIDGETS,
   defaultConfigForWidget,
+  widgetEditorMode,
 } from '../lib/widgetCatalog';
 import {
   asWidgetConfig,
@@ -636,6 +637,7 @@ function SectionModal({
 
   const widget = WIDGETS.find((candidate) => candidate.type === type);
   const schema = widget?.schema;
+  const runtimeManaged = widgetEditorMode(widget) === 'runtime-managed';
 
   const replaceConfiguration = (
     nextType: string,
@@ -796,7 +798,16 @@ function SectionModal({
           ))}
         </div>
       </div>
-      {schema && !advancedJson ? (
+      {runtimeManaged ? (
+        <div className="field">
+          <label>Runtime-managed configuration</label>
+          <div className="alert">
+            Footer links, copyright, translations, and the widget key are injected by
+            <code> condorito-screen</code>. Only this section&apos;s order and active state
+            can be changed in the Back Office. Existing stored configuration is preserved on save.
+          </div>
+        </div>
+      ) : schema && !advancedJson ? (
         <>
           <WidgetSchemaForm
             schema={schema}

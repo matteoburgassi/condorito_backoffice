@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { defaultsFromSchema, type WidgetSchema } from '../lib/widgetCatalog';
 import {
   asWidgetConfig,
@@ -20,24 +21,44 @@ function asRecord(value: unknown): SchemaFormValue {
   return asWidgetConfig(value);
 }
 
+function setNestedValue(
+  source: unknown,
+  path: string[],
+  value: unknown,
+): unknown {
+  if (path.length === 0) return value;
+  const [key, ...rest] = path;
+
+  if (Array.isArray(source)) {
+    const index = Number(key);
+    if (!Number.isInteger(index) || index < 0) return source;
+    const next = [...source];
+    next[index] = rest.length === 0
+      ? value
+      : setNestedValue(source[index], rest, value);
+    return next;
+  }
+
+  const record = asRecord(source);
+  if (rest.length === 0 && value === undefined) {
+    const next = { ...record };
+    delete next[key];
+    return next;
+  }
+  return {
+    ...record,
+    [key]: rest.length === 0
+      ? value
+      : setNestedValue(record[key], rest, value),
+  };
+}
+
 export function setValueAtPath(
   source: SchemaFormValue,
   path: string[],
   value: unknown,
 ): SchemaFormValue {
-  if (path.length === 0) return asRecord(value);
-  const [key, ...rest] = path;
-  if (rest.length === 0 && value === undefined) {
-    const next = { ...source };
-    delete next[key];
-    return next;
-  }
-  return {
-    ...source,
-    [key]: rest.length === 0
-      ? value
-      : setValueAtPath(asRecord(source[key]), rest, value),
-  };
+  return asRecord(setNestedValue(source, path, value));
 }
 
 export function parseNumberInput(value: string): number | string {
@@ -58,6 +79,16 @@ export function removeArrayItem<T>(items: T[], index: number): T[] {
   return items.filter((_, itemIndex) => itemIndex !== index);
 }
 
+export function moveArrayItem<T>(items: T[], index: number, delta: -1 | 1): T[] {
+  const target = index + delta;
+  if (index < 0 || index >= items.length || target < 0 || target >= items.length) {
+    return items;
+  }
+  const next = [...items];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
 export function optionalObjectDefaults(schema: WidgetSchema): SchemaFormValue {
   const result: SchemaFormValue = {};
   for (const [key, property] of Object.entries(schema.properties ?? {})) {
@@ -67,11 +98,26 @@ export function optionalObjectDefaults(schema: WidgetSchema): SchemaFormValue {
   return result;
 }
 
-export function changeDataBindingSource(value: unknown, source: string): SchemaFormValue {
+export function bindingPropertyApplies(schema: WidgetSchema, source: string): boolean {
+  return !schema['x-binding-sources'] || schema['x-binding-sources'].includes(source);
+}
+
+export function changeDataBindingSource(
+  value: unknown,
+  source: string,
+  schema?: WidgetSchema,
+): SchemaFormValue {
   const next: SchemaFormValue = { ...asRecord(value), source };
-  if (source === 'continue_reading') {
-    delete next.containerId;
-    delete next.limit;
+  if (schema) {
+    for (const [key, property] of Object.entries(schema.properties ?? {})) {
+      if (key !== 'source' && !bindingPropertyApplies(property, source)) {
+        delete next[key];
+      }
+    }
+  } else if (source === 'continue_reading') {
+    for (const key of ['containerId', 'limit', 'freeOnly', 'title']) delete next[key];
+  } else if (source === 'comics' || source === 'container') {
+    for (const key of ['freeOnly', 'title']) delete next[key];
   }
   return next;
 }
@@ -104,10 +150,50 @@ function Field({
   const error = errors[fieldPath];
 
   if (schema.type === 'object') {
+    if (path.length > 0 && schema['x-optional']) {
+      const enabled = value !== null && typeof value === 'object' && !Array.isArray(value);
+      const enabledSchema = { ...schema };
+      delete enabledSchema['x-optional'];
+      return (
+        <div className="field">
+          <Switch
+            checked={enabled}
+            onChange={(checked) => onChange(
+              path,
+              checked ? optionalObjectDefaults(schema) : undefined,
+            )}
+            label={`Enable ${label}`}
+          />
+          {schema.description && <div className="field-hint">{schema.description}</div>}
+          {enabled && (
+            <Field
+              schema={enabledSchema}
+              path={path}
+              value={value}
+              onChange={onChange}
+              errors={errors}
+              required={required}
+            />
+          )}
+        </div>
+      );
+    }
+
     if (schema['x-control'] === 'data-binding') {
       const binding = asRecord(value);
-      const source = typeof binding.source === 'string' ? binding.source : 'comics';
       const properties = schema.properties ?? {};
+      const schemaDefault = asRecord(schema.default);
+      const firstSource = properties.source?.enum?.find(
+        (option): option is string => typeof option === 'string',
+      );
+      const source = typeof binding.source === 'string'
+        ? binding.source
+        : typeof schemaDefault.source === 'string'
+          ? schemaDefault.source
+          : firstSource ?? '';
+      const parameterEntries = Object.entries(properties).filter(
+        ([key, property]) => key !== 'source' && bindingPropertyApplies(property, source),
+      );
       return (
         <fieldset className="field">
           <legend>{label}</legend>
@@ -119,7 +205,7 @@ function Field({
               value={source}
               onChange={(sourcePath, nextSource) => {
                 if (typeof nextSource === 'string') {
-                  onChange(path, changeDataBindingSource(binding, nextSource));
+                  onChange(path, changeDataBindingSource(binding, nextSource, schema));
                 } else {
                   onChange(sourcePath, nextSource);
                 }
@@ -128,34 +214,24 @@ function Field({
               required
             />
           )}
-          {(source === 'comics' || source === 'container') && properties.containerId && (
+          {parameterEntries.map(([key, property]) => (
             <Field
-              schema={{
-                ...properties.containerId,
-                description: source === 'container'
-                  ? 'Required fixed container identifier.'
-                  : 'Optional. Leave empty to use the current screen slug.',
-              }}
-              path={[...path, 'containerId']}
-              value={binding.containerId}
+              key={key}
+              schema={property}
+              path={[...path, key]}
+              value={binding[key]}
               onChange={onChange}
               errors={errors}
-              required={source === 'container'}
+              required={property['x-required-for-sources']?.includes(source)}
             />
-          )}
-          {(source === 'comics' || source === 'container') && properties.limit && (
-            <Field
-              schema={properties.limit}
-              path={[...path, 'limit']}
-              value={binding.limit}
-              onChange={onChange}
-              errors={errors}
-            />
-          )}
+          ))}
           {source === 'continue_reading' && (
             <div className="field-hint">
               Uses the signed-in user’s saved progress; no source parameters are required.
             </div>
+          )}
+          {source !== 'continue_reading' && parameterEntries.length === 0 && (
+            <div className="field-hint">This source has no additional parameters.</div>
           )}
         </fieldset>
       );
@@ -234,23 +310,6 @@ function Field({
     );
 
     if (path.length === 0) return <div>{content}</div>;
-    if (schema['x-optional']) {
-      const enabled = value !== null && typeof value === 'object' && !Array.isArray(value);
-      return (
-        <div className="field">
-          <Switch
-            checked={enabled}
-            onChange={(checked) => onChange(
-              path,
-              checked ? optionalObjectDefaults(schema) : undefined,
-            )}
-            label={`Enable ${label}`}
-          />
-          {schema.description && <div className="field-hint">{schema.description}</div>}
-          {enabled && <fieldset style={{ marginTop: 8 }}>{content}</fieldset>}
-        </div>
-      );
-    }
     return (
       <fieldset className="field">
         <legend>{label}</legend>
@@ -339,7 +398,11 @@ function Field({
     return (
       <div className="field">
         <Switch
-          checked={typeof value === 'boolean' ? value : false}
+          checked={typeof value === 'boolean'
+            ? value
+            : typeof schema.default === 'boolean'
+              ? schema.default
+              : false}
           onChange={(checked) => onChange(path, checked)}
           label={label}
         />
@@ -402,6 +465,90 @@ function Field({
               onClick={() => onChange(path, addArrayItem(items, newItemDefault))}
             >
               Add {schema.items.title ?? 'item'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (schema.type === 'array' && schema.items?.type === 'object') {
+    const itemSchema = schema.items;
+    const items = Array.isArray(value) ? value.map(asRecord) : [];
+    const itemLabel = itemSchema.title ?? 'Item';
+    const generatedDefault = defaultsFromSchema(itemSchema);
+    const newItemDefault = asRecord(generatedDefault);
+
+    return (
+      <div className="field">
+        <label>
+          {label}
+          {required && <span style={{ color: 'var(--primary)' }}> *</span>}
+        </label>
+        {schema.description && !error && <div className="field-hint">{schema.description}</div>}
+        {error && <div className="field-hint" style={{ color: 'var(--error)' }}>{error}</div>}
+        <div className="schema-array">
+          {items.map((item, index) => {
+            const itemPath = `${fieldPath}.${index}`;
+            const itemError = errors[itemPath];
+            return (
+              <div className="schema-array-item" key={index}>
+                <div className="schema-array-item-head">
+                  <strong>{itemLabel} {index + 1}</strong>
+                  <div className="schema-array-item-actions">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-icon"
+                      onClick={() => onChange(path, moveArrayItem(items, index, -1))}
+                      disabled={index === 0}
+                      aria-label={`Move ${itemLabel} ${index + 1} up`}
+                      title="Move up"
+                    >
+                      <ChevronUp size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-icon"
+                      onClick={() => onChange(path, moveArrayItem(items, index, 1))}
+                      disabled={index === items.length - 1}
+                      aria-label={`Move ${itemLabel} ${index + 1} down`}
+                      title="Move down"
+                    >
+                      <ChevronDown size={15} />
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => onChange(path, removeArrayItem(items, index))}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+                {itemError && (
+                  <div className="field-hint" style={{ color: 'var(--error)' }}>{itemError}</div>
+                )}
+                {Object.entries(itemSchema.properties ?? {}).map(([key, childSchema]) => (
+                  <Field
+                    key={key}
+                    schema={childSchema}
+                    path={[...path, String(index), key]}
+                    value={item[key]}
+                    onChange={onChange}
+                    errors={errors}
+                    required={itemSchema.required?.includes(key)}
+                  />
+                ))}
+              </div>
+            );
+          })}
+          <div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => onChange(path, addArrayItem(items, newItemDefault))}
+            >
+              Add {itemLabel}
             </button>
           </div>
         </div>
