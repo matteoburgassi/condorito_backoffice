@@ -864,6 +864,12 @@ const BANNER_SCHEMA: WidgetSchema = {
       minLength: 1,
       'x-translatable': true,
     },
+    footnote: {
+      type: 'string',
+      title: 'Footnote',
+      description: 'Optional footnote text displayed at the bottom of the banner.',
+      'x-translatable': true,
+    },
     ctaAction: CTA_ACTION_SCHEMA,
     audience: AUDIENCE_SCHEMA,
   },
