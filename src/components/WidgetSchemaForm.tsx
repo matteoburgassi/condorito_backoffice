@@ -102,6 +102,17 @@ export function bindingPropertyApplies(schema: WidgetSchema, source: string): bo
   return !schema['x-binding-sources'] || schema['x-binding-sources'].includes(source);
 }
 
+export function fieldVisibilityApplies(
+  schema: WidgetSchema,
+  siblingValues: unknown,
+): boolean {
+  const condition = schema['x-visible-when'];
+  if (!condition) return true;
+  const siblings = asRecord(siblingValues);
+  const actual = siblings[condition.property] ?? condition.defaultValue;
+  return actual === condition.equals;
+}
+
 export function changeDataBindingSource(
   value: unknown,
   source: string,
@@ -295,17 +306,19 @@ function Field({
 
     const content = (
       <>
-        {Object.entries(schema.properties ?? {}).map(([key, childSchema]) => (
-          <Field
-            key={key}
-            schema={childSchema}
-            path={[...path, key]}
-            value={asRecord(value)[key]}
-            onChange={onChange}
-            errors={errors}
-            required={schema.required?.includes(key)}
-          />
-        ))}
+        {Object.entries(schema.properties ?? {})
+          .filter(([, childSchema]) => fieldVisibilityApplies(childSchema, value))
+          .map(([key, childSchema]) => (
+            <Field
+              key={key}
+              schema={childSchema}
+              path={[...path, key]}
+              value={asRecord(value)[key]}
+              onChange={onChange}
+              errors={errors}
+              required={schema.required?.includes(key)}
+            />
+          ))}
       </>
     );
 
@@ -595,11 +608,13 @@ export function WidgetTranslationFields({
   value: SchemaFormValue;
   onChange: (value: SchemaFormValue) => void;
 }) {
-  const fields = translatableProperties(schema).filter(({ key }) => {
+  const fields = translatableProperties(schema).filter(({ key, property }) => {
     const parentPath = key.split('.').slice(0, -1).join('.');
-    if (!parentPath) return true;
-    const parent = valueAtConfigPath(value, parentPath);
-    return parent !== null && typeof parent === 'object' && !Array.isArray(parent);
+    const parent = parentPath ? valueAtConfigPath(value, parentPath) : value;
+    return parent !== null
+      && typeof parent === 'object'
+      && !Array.isArray(parent)
+      && fieldVisibilityApplies(property, parent);
   });
   if (fields.length === 0) return null;
 
