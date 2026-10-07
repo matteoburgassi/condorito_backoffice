@@ -227,6 +227,12 @@ const HERO_IMAGE_SCHEMA: WidgetSchema = {
       default: 345 / 231,
       exclusiveMinimum: 0,
     },
+    caption: {
+      type: 'string',
+      title: 'Desktop caption',
+      description: 'Optional light-gray text displayed above the hero on desktop.',
+      'x-translatable': true,
+    },
     audience: AUDIENCE_SCHEMA,
   },
 };
