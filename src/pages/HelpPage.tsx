@@ -39,7 +39,9 @@ export function HelpPage() {
           <p style={{ margin: 0 }}>
             <strong>Documents</strong> (terms, privacy, …) are edited under <strong>Documents</strong> and loaded by{' '}
             <Code>get-product-document</Code>. Open them in the app via{' '}
-            <Code>/document?slug=cgu</Code> (or <Code>privacy-policy</Code>, etc.). The WYSIWYG keeps headings,
+            <Code>/document?slug=cgu</Code> (or <Code>privacy-policy</Code>, etc.). Bodies are platform-specific
+            (<Code>is_desktop</Code>): mobile app and desktop browser can differ for the same slug; request the
+            matching platform and fall back to mobile when desktop content is missing. The WYSIWYG keeps headings,
             paragraphs, lists, plus bold / italic / underline; paste from Word/Docs is sanitized to those.
             Document bodies are cached on the client for ~10 minutes.
           </p>

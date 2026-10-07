@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, FileText, Inbox } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useProduct } from '../lib/ProductContext';
@@ -6,6 +6,7 @@ import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Spinner } from '../components/Spinner';
 import { HtmlBodyEditor } from '../components/HtmlBodyEditor';
+import { isDesktopPlatform, type SectionPlatform } from '../lib/screenSections';
 
 type DocumentRow = {
   id: string;
@@ -22,6 +23,14 @@ type ContentRow = {
   locale: string;
   title: string;
   body_html: string;
+  is_desktop: boolean;
+};
+
+type ContentValues = {
+  locale: string;
+  title: string;
+  body_html: string;
+  is_desktop: boolean;
 };
 
 export function DocumentsPage() {
@@ -29,6 +38,7 @@ export function DocumentsPage() {
   const [docs, setDocs] = useState<DocumentRow[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [contents, setContents] = useState<ContentRow[]>([]);
+  const [contentPlatform, setContentPlatform] = useState<SectionPlatform>('mobile');
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [loadingContents, setLoadingContents] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +47,7 @@ export function DocumentsPage() {
   const [contentModal, setContentModal] = useState<{ record: ContentRow | null } | null>(null);
   const [deleteDoc, setDeleteDoc] = useState<DocumentRow | null>(null);
   const [deleteContent, setDeleteContent] = useState<ContentRow | null>(null);
+  const [copyingToDesktopId, setCopyingToDesktopId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadDocs = useCallback(async () => {
@@ -83,6 +94,11 @@ export function DocumentsPage() {
   }, [selectedId, loadContents]);
 
   const selected = docs.find((d) => d.id === selectedId) ?? null;
+  const isDesktop = isDesktopPlatform(contentPlatform);
+  const visibleContents = useMemo(
+    () => contents.filter((c) => c.is_desktop === isDesktop),
+    [contents, isDesktop],
+  );
 
   const saveDoc = async (values: { slug: string; path: string; title: string; version: number }) => {
     setBusy(true);
@@ -127,7 +143,7 @@ export function DocumentsPage() {
     await loadDocs();
   };
 
-  const saveContent = async (values: { locale: string; title: string; body_html: string }) => {
+  const saveContent = async (values: ContentValues) => {
     if (!selectedId) return;
     setBusy(true);
     setError(null);
@@ -157,6 +173,7 @@ export function DocumentsPage() {
       return;
     }
     setContentModal(null);
+    setContentPlatform(values.is_desktop ? 'desktop' : 'mobile');
     await loadContents(selectedId);
     await loadDocs();
   };
@@ -172,6 +189,37 @@ export function DocumentsPage() {
     }
     setDeleteContent(null);
     await loadContents(selectedId);
+  };
+
+  const copyContentToDesktop = async (content: ContentRow) => {
+    if (!selectedId || content.is_desktop || copyingToDesktopId) return;
+    setError(null);
+    setCopyingToDesktopId(content.id);
+
+    const { error } = await supabase
+      .from('product_document_content')
+      .insert({
+        document_id: selectedId,
+        locale: content.locale,
+        title: content.title,
+        body_html: content.body_html,
+        is_desktop: true,
+      });
+
+    if (error) {
+      setCopyingToDesktopId(null);
+      setError(error.message);
+      return;
+    }
+
+    await supabase
+      .from('product_documents')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', selectedId);
+
+    await loadContents(selectedId);
+    await loadDocs();
+    setCopyingToDesktopId(null);
   };
 
   if (!productId) {
@@ -293,25 +341,44 @@ export function DocumentsPage() {
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'space-between',
+                    gap: 12,
+                    flexWrap: 'wrap',
                     padding: '14px 16px',
                     borderBottom: '1px solid var(--border)',
                   }}
                 >
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>Locale content</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <div role="group" aria-label="Content platform" style={{ display: 'flex', gap: 4 }}>
+                      {(['mobile', 'desktop'] as const).map((platform) => (
+                        <button
+                          key={platform}
+                          type="button"
+                          className={`btn btn-sm ${contentPlatform === platform ? 'btn-primary' : 'btn-ghost'}`}
+                          aria-pressed={contentPlatform === platform}
+                          onClick={() => setContentPlatform(platform)}
+                        >
+                          {platform === 'mobile' ? 'Mobile' : 'Desktop'}
+                        </button>
+                      ))}
+                    </div>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>
+                      {contentPlatform === 'desktop' ? 'Desktop' : 'Mobile'} locale content
+                    </span>
+                  </div>
                   <button className="btn btn-primary btn-sm" onClick={() => setContentModal({ record: null })}>
                     <Plus size={14} />
-                    Add locale
+                    Add {contentPlatform === 'desktop' ? 'Desktop' : 'Mobile'} locale
                   </button>
                 </div>
                 {loadingContents ? (
                   <Spinner label="Loading…" />
-                ) : contents.length === 0 ? (
+                ) : visibleContents.length === 0 ? (
                   <div className="empty" style={{ padding: 40 }}>
-                    No locale content. Add <code>es</code> (and ideally <code>en</code> for fallback).
+                    No {contentPlatform} locale content. Add <code>es</code> (and ideally <code>en</code> for fallback).
                   </div>
                 ) : (
                   <div>
-                    {contents.map((c) => (
+                    {visibleContents.map((c) => (
                       <div
                         key={c.id}
                         style={{
@@ -323,7 +390,10 @@ export function DocumentsPage() {
                         }}
                       >
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: 14 }}>{c.title}</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <div style={{ fontWeight: 600, fontSize: 14 }}>{c.title}</div>
+                            <span className="badge">{c.is_desktop ? 'Desktop' : 'Mobile'}</span>
+                          </div>
                           <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>
                             Locale <code className="doc-inline">{c.locale}</code>
                             {' · '}
@@ -331,6 +401,16 @@ export function DocumentsPage() {
                             {(c.body_html ?? '').replace(/<[^>]*>/g, ' ').trim().length > 80 ? '…' : ''}
                           </div>
                         </div>
+                        {!c.is_desktop && (
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            disabled={copyingToDesktopId !== null}
+                            style={{ opacity: copyingToDesktopId === c.id ? 0.5 : undefined }}
+                            onClick={() => copyContentToDesktop(c)}
+                          >
+                            add to desktop version
+                          </button>
+                        )}
                         <button className="btn btn-ghost btn-sm" onClick={() => setContentModal({ record: c })}>
                           <Pencil size={14} />
                           Edit
@@ -360,6 +440,7 @@ export function DocumentsPage() {
         <ContentModal
           record={contentModal.record}
           busy={busy}
+          defaultIsDesktop={isDesktop}
           onCancel={() => setContentModal(null)}
           onSubmit={saveContent}
         />
@@ -376,7 +457,7 @@ export function DocumentsPage() {
       {deleteContent && (
         <ConfirmDialog
           title="Delete locale content?"
-          message={`Remove the “${deleteContent.locale}” version of this document?`}
+          message={`Remove the ${deleteContent.is_desktop ? 'desktop' : 'mobile'} “${deleteContent.locale}” version of this document?`}
           onConfirm={confirmDeleteContent}
           onCancel={() => setDeleteContent(null)}
           busy={busy}
@@ -461,17 +542,20 @@ function DocModal({
 function ContentModal({
   record,
   busy,
+  defaultIsDesktop,
   onCancel,
   onSubmit,
 }: {
   record: ContentRow | null;
   busy: boolean;
+  defaultIsDesktop: boolean;
   onCancel: () => void;
-  onSubmit: (v: { locale: string; title: string; body_html: string }) => void;
+  onSubmit: (v: ContentValues) => void;
 }) {
   const [locale, setLocale] = useState(record?.locale ?? 'es');
   const [title, setTitle] = useState(record?.title ?? '');
   const [bodyHtml, setBodyHtml] = useState(record?.body_html ?? '<p></p>');
+  const [isDesktop, setIsDesktop] = useState(record?.is_desktop ?? defaultIsDesktop);
   const [err, setErr] = useState<string | null>(null);
 
   const submit = () => {
@@ -484,7 +568,12 @@ function ContentModal({
       return;
     }
     const html = bodyHtml.trim() || '<p></p>';
-    onSubmit({ locale: locale.trim().toLowerCase(), title: title.trim(), body_html: html });
+    onSubmit({
+      locale: locale.trim().toLowerCase(),
+      title: title.trim(),
+      body_html: html,
+      is_desktop: isDesktop,
+    });
   };
 
   return (
@@ -502,6 +591,24 @@ function ContentModal({
       }
     >
       {err && <div className="alert alert-error">{err}</div>}
+      <div className="field">
+        <label>Platform <span style={{ color: 'var(--primary)' }}>*</span></label>
+        <div role="group" aria-label="Content platform" style={{ display: 'flex', gap: 4 }}>
+          {(['mobile', 'desktop'] as const).map((platform) => (
+            <button
+              key={platform}
+              type="button"
+              className={`btn btn-sm ${isDesktop === (platform === 'desktop') ? 'btn-primary' : 'btn-ghost'}`}
+              aria-pressed={isDesktop === (platform === 'desktop')}
+              onClick={() => setIsDesktop(platform === 'desktop')}
+              disabled={busy}
+            >
+              {platform === 'mobile' ? 'Mobile' : 'Desktop'}
+            </button>
+          ))}
+        </div>
+        <div className="field-hint">Mobile app and desktop browser can have different legal text for the same slug.</div>
+      </div>
       <div className="field">
         <label htmlFor="content-locale">Locale <span style={{ color: 'var(--primary)' }}>*</span></label>
         <input
