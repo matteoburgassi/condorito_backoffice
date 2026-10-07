@@ -15,7 +15,9 @@ export type WidgetSchema = {
   enum?: Array<string | number>;
   minLength?: number;
   minItems?: number;
+  maxItems?: number;
   minimum?: number;
+  maximum?: number;
   exclusiveMinimum?: number;
   properties?: Record<string, WidgetSchema>;
   required?: string[];
@@ -28,7 +30,13 @@ export type WidgetSchema = {
   /** Marks literal string fields that can be overridden through config.i18n. */
   'x-translatable'?: boolean;
   /** Applies cross-field validation that cannot be expressed by this schema subset. */
-  'x-validate'?: 'filter-spec' | 'filter-chip-items';
+  'x-validate'?: 'filter-spec' | 'filter-chip-items' | 'banner-cta';
+  /** Shows a generated field only when a sibling property has the expected value. */
+  'x-visible-when'?: {
+    property: string;
+    equals: string | number | boolean;
+    defaultValue?: string | number | boolean;
+  };
   /** Binding sources for which this data-binding property is visible. */
   'x-binding-sources'?: string[];
   /** Binding sources for which this property is required. */
@@ -48,6 +56,10 @@ export type WidgetDoc = {
   schema?: WidgetSchema;
   /** The Edge Function owns this widget's configuration; the Back Office edits only section metadata. */
   editor?: 'runtime-managed';
+  /** Restricts this layout/controller type to specific screen slugs. */
+  allowedScreenSlugs?: string[];
+  /** Forces sections of this type onto the desktop layout at full width. */
+  desktopOnly?: boolean;
 };
 
 export type SourceDoc = {
@@ -195,6 +207,12 @@ const HERO_IMAGE_SCHEMA: WidgetSchema = {
   additionalProperties: true,
   required: ['asset'],
   properties: {
+    renderOnMobile: {
+      type: 'boolean',
+      title: 'Render On Mobile',
+      description: 'Toggle rendering of this widget on Mobile apps',
+      default: false,
+    },
     asset: {
       type: 'string',
       title: 'Asset',
@@ -208,6 +226,12 @@ const HERO_IMAGE_SCHEMA: WidgetSchema = {
       description: 'Image width divided by height.',
       default: 345 / 231,
       exclusiveMinimum: 0,
+    },
+    caption: {
+      type: 'string',
+      title: 'Desktop caption',
+      description: 'Optional light-gray text displayed above the hero on desktop.',
+      'x-translatable': true,
     },
     audience: AUDIENCE_SCHEMA,
   },
@@ -822,7 +846,8 @@ const BANNER_ASSETS_SCHEMA: WidgetSchema = {
 const BANNER_SCHEMA: WidgetSchema = {
   type: 'object',
   additionalProperties: true,
-  required: ['backgroundColor', 'title', 'ctaLabel', 'ctaAction'],
+  required: ['backgroundColor', 'title'],
+  'x-validate': 'banner-cta',
   properties: {
     key: WIDGET_KEY_SCHEMA,
     variant: {
@@ -857,11 +882,38 @@ const BANNER_SCHEMA: WidgetSchema = {
       description: 'Used only by the columns variant.',
       'x-translatable': true,
     },
+    ctaStyle: {
+      type: 'string',
+      enum: ['button', 'text', 'hidden'],
+      title: 'CTA style',
+      description: 'Used only by the columns banner variant.',
+      default: 'button',
+      'x-visible-when': {
+        property: 'variant',
+        equals: 'columns',
+        defaultValue: 'columns',
+      },
+    },
     ctaLabel: {
       type: 'string',
       title: 'Button label',
       default: 'Ver más',
-      minLength: 1,
+      'x-translatable': true,
+    },
+    ctaText: {
+      type: 'string',
+      title: 'Banner text',
+      'x-translatable': true,
+      'x-visible-when': {
+        property: 'ctaStyle',
+        equals: 'text',
+        defaultValue: 'button',
+      },
+    },
+    footnote: {
+      type: 'string',
+      title: 'Footnote',
+      description: 'Optional footnote text displayed at the bottom of the banner.',
       'x-translatable': true,
     },
     ctaAction: CTA_ACTION_SCHEMA,
@@ -1119,6 +1171,77 @@ const FILTER_CHIPS_SCHEMA: WidgetSchema = {
   },
 };
 
+const AREA_LIBRE_COMPOSITION_SCHEMA: WidgetSchema = {
+  type: 'object',
+  additionalProperties: true,
+  required: [
+    'key',
+    'variant',
+    'primaryKey',
+    'secondaryKeys',
+    'primaryGridCells',
+    'gap',
+    'secondaryGap',
+  ],
+  properties: {
+    key: {
+      type: 'string',
+      title: 'Controller key',
+      default: 'freemium_desktop_composition',
+      minLength: 1,
+    },
+    variant: {
+      type: 'string',
+      title: 'Layout variant',
+      enum: ['featured-left-secondary-stack'],
+      default: 'featured-left-secondary-stack',
+    },
+    primaryKey: {
+      type: 'string',
+      title: 'Primary widget key',
+      description: 'Active desktop widget displayed in the left column.',
+      default: 'freemium_comics',
+      minLength: 1,
+    },
+    secondaryKeys: {
+      type: 'array',
+      title: 'Secondary widget keys',
+      description: 'Active desktop widgets stacked in this order in the right column.',
+      default: ['freemium_chistes', 'freemium_subscription'],
+      minItems: 1,
+      items: {
+        type: 'string',
+        title: 'Widget key',
+        minLength: 1,
+      },
+    },
+    primaryGridCells: {
+      type: 'number',
+      title: 'Primary column cells',
+      description: 'Width of the left column in the internal 12-column layout.',
+      default: 8,
+      minimum: 1,
+      maximum: 11,
+    },
+    gap: {
+      type: 'number',
+      title: 'Column gap',
+      description: 'Horizontal space between the primary and secondary columns.',
+      default: 24,
+      minimum: 0,
+      maximum: 64,
+    },
+    secondaryGap: {
+      type: 'number',
+      title: 'Secondary gap',
+      description: 'Vertical space between widgets in the right column.',
+      default: 16,
+      minimum: 0,
+      maximum: 64,
+    },
+  },
+};
+
 export const DATA_SOURCES: SourceDoc[] = [
   {
     source: 'comics',
@@ -1308,6 +1431,17 @@ export const WIDGETS: WidgetDoc[] = [
     sources: [],
     schema: FILTER_CHIPS_SCHEMA,
     example: defaultsFromSchema(FILTER_CHIPS_SCHEMA) as Record<string, unknown>,
+  },
+  {
+    type: 'area-libre-composition',
+    label: 'Área Libre desktop composition',
+    description: 'Places the featured comic on the left and stacks selected widgets on the right.',
+    binding: 'none',
+    sources: [],
+    schema: AREA_LIBRE_COMPOSITION_SCHEMA,
+    example: defaultsFromSchema(AREA_LIBRE_COMPOSITION_SCHEMA) as Record<string, unknown>,
+    allowedScreenSlugs: ['freemium'],
+    desktopOnly: true,
   },
   {
     type: 'footer',

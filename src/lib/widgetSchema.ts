@@ -110,6 +110,30 @@ export function validateWidgetConfig(
         errors[fromPath] = 'must be less than or equal to the ending year';
       }
     }
+    if (currentSchema['x-validate'] === 'banner-cta') {
+      const variant = typeof record.variant === 'string' ? record.variant : 'columns';
+      const configuredStyle = typeof record.ctaStyle === 'string' ? record.ctaStyle : 'button';
+      const effectiveStyle = variant === 'columns' ? configuredStyle : 'button';
+      const requireNonEmptyString = (key: 'ctaLabel' | 'ctaText') => {
+        const fieldValue = record[key];
+        if (typeof fieldValue !== 'string' || fieldValue.trim() === '') {
+          errors[`${path}.${key}`.replace(/^\./, '')] = 'is required for the selected CTA style';
+        }
+      };
+
+      if (effectiveStyle === 'button') requireNonEmptyString('ctaLabel');
+      if (effectiveStyle === 'text') requireNonEmptyString('ctaText');
+      if (
+        effectiveStyle !== 'hidden'
+        && (
+          record.ctaAction === null
+          || typeof record.ctaAction !== 'object'
+          || Array.isArray(record.ctaAction)
+        )
+      ) {
+        errors[`${path}.ctaAction`.replace(/^\./, '')] = 'is required for the selected CTA style';
+      }
+    }
     if (currentSchema['x-control'] === 'data-binding') {
       const source = typeof record.source === 'string' ? record.source : '';
       for (const [key, property] of Object.entries(currentSchema.properties ?? {})) {
