@@ -4,6 +4,7 @@ import {
   bindingPropertyApplies,
   changeActionType,
   changeDataBindingSource,
+  fieldVisibilityApplies,
   moveArrayItem,
   optionalObjectDefaults,
   parseNumberInput,
@@ -459,6 +460,7 @@ describe('hero-image schema form', () => {
     expect(defaultConfigForWidget(heroImage)).toEqual({
       asset: 'example-asset.svg',
       aspectRatio: 345 / 231,
+      renderOnMobile: false,
     });
   });
 
@@ -474,7 +476,17 @@ describe('hero-image schema form', () => {
     expect(validateWidgetConfig(heroImage.schema, {
       asset: 'personajes-top-img',
       aspectRatio: 1.7,
+      caption: 'Descubre nuestros personajes',
     })).toEqual({});
+  });
+
+  it('exposes an optional translatable desktop caption', () => {
+    expect(heroImage.schema.properties?.caption).toMatchObject({
+      type: 'string',
+      'x-translatable': true,
+    });
+    expect(defaultConfigForWidget(heroImage)).not.toHaveProperty('caption');
+    expect(translatableProperties(heroImage.schema).map(({ key }) => key)).toContain('caption');
   });
 
   it('parses number input while preserving empty and invalid in-progress values', () => {
@@ -828,6 +840,65 @@ describe('complete widget catalog forms', () => {
     expect(widget.schema.properties).toHaveProperty('audience');
   });
 
+  it('validates banner CTA fields conditionally by variant and style', () => {
+    const widget = generatedWidget('banner');
+    const defaults = defaultConfigForWidget(widget);
+    const without = (
+      source: Record<string, unknown>,
+      ...keys: string[]
+    ): Record<string, unknown> => Object.fromEntries(
+      Object.entries(source).filter(([key]) => !keys.includes(key)),
+    );
+
+    expect(validateWidgetConfig(widget.schema, {
+      ...without(defaults, 'ctaLabel'),
+    })).toHaveProperty('ctaLabel');
+    expect(validateWidgetConfig(widget.schema, {
+      ...without(defaults, 'ctaAction'),
+    })).toHaveProperty('ctaAction');
+
+    const textConfig = {
+      ...defaults,
+      ctaStyle: 'text',
+      ctaLabel: '',
+      ctaText: 'Disfruta contenidos gratuitos',
+    };
+    expect(validateWidgetConfig(widget.schema, textConfig)).toEqual({});
+    expect(validateWidgetConfig(widget.schema, {
+      ...textConfig,
+      ctaText: '',
+    })).toHaveProperty('ctaText');
+
+    expect(validateWidgetConfig(widget.schema, {
+      ...without(defaults, 'ctaAction'),
+      ctaStyle: 'hidden',
+      ctaLabel: '',
+      ctaText: '',
+    })).toEqual({});
+
+    expect(validateWidgetConfig(widget.schema, {
+      ...without(defaults, 'ctaLabel', 'ctaAction'),
+      variant: 'stacked',
+      ctaStyle: 'hidden',
+    })).toMatchObject({
+      ctaLabel: expect.any(String),
+      ctaAction: expect.any(String),
+    });
+  });
+
+  it('shows columns CTA controls only when their conditions apply', () => {
+    const widget = generatedWidget('banner');
+    const ctaStyle = widget.schema.properties?.ctaStyle;
+    const ctaText = widget.schema.properties?.ctaText;
+    if (!ctaStyle || !ctaText) throw new Error('Banner CTA schemas are required.');
+
+    expect(fieldVisibilityApplies(ctaStyle, { variant: 'columns' })).toBe(true);
+    expect(fieldVisibilityApplies(ctaStyle, { variant: 'stacked' })).toBe(false);
+    expect(fieldVisibilityApplies(ctaText, {})).toBe(false);
+    expect(fieldVisibilityApplies(ctaText, { ctaStyle: 'button' })).toBe(false);
+    expect(fieldVisibilityApplies(ctaText, { ctaStyle: 'text' })).toBe(true);
+  });
+
   it('keeps static-widget controls aligned with their runtime contracts', () => {
     const upsell = generatedWidget('upsell');
     const screenHeader = generatedWidget('screen-header');
@@ -891,11 +962,43 @@ describe('complete widget catalog forms', () => {
     expect(translatableProperties(generatedWidget('avatar-row').schema).map(({ key }) => key))
       .toEqual(['title', 'emptyMessage', 'headerAction.label']);
     expect(translatableProperties(generatedWidget('banner').schema).map(({ key }) => key))
-      .toEqual(['title', 'subtitle', 'subtitle2', 'ctaLabel']);
+      .toEqual(['title', 'subtitle', 'subtitle2', 'ctaLabel', 'ctaText', 'footnote']);
     expect(translatableProperties(generatedWidget('upsell').schema).map(({ key }) => key))
       .toEqual(['headline', 'subtitle', 'ctaLabel']);
     expect(translatableProperties(generatedWidget('screen-header').schema).map(({ key }) => key))
       .toEqual(['title', 'subtitle', 'rightAction.label']);
+  });
+
+  it('keeps section grid layout out of widget-specific schemas', () => {
+    for (const widget of WIDGETS) {
+      if (!widget.schema) continue;
+      expect(JSON.stringify(widget.schema)).not.toContain('"gridCells"');
+    }
+  });
+
+  it('provides a freemium-only desktop composition with valid defaults', () => {
+    const composition = WIDGETS.find((widget) => widget.type === 'area-libre-composition');
+    if (!composition?.schema) throw new Error('Area Libre composition schema is required.');
+
+    const defaults = defaultConfigForWidget(composition);
+    expect(composition.allowedScreenSlugs).toEqual(['freemium']);
+    expect(composition.desktopOnly).toBe(true);
+    expect(defaults).toMatchObject({
+      key: 'freemium_desktop_composition',
+      variant: 'featured-left-secondary-stack',
+      primaryKey: 'freemium_comics',
+      secondaryKeys: ['freemium_chistes', 'freemium_subscription'],
+      primaryGridCells: 8,
+    });
+    expect(validateWidgetConfig(composition.schema, defaults)).toEqual({});
+    expect(validateWidgetConfig(composition.schema, {
+      ...defaults,
+      primaryGridCells: 12,
+      gap: 65,
+    })).toMatchObject({
+      primaryGridCells: expect.any(String),
+      gap: expect.any(String),
+    });
   });
 
   it('marks Footer as runtime-managed and preserves stored config verbatim', () => {

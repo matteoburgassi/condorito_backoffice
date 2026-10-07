@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Plus,
   Pencil,
@@ -25,6 +25,19 @@ import {
 } from '../lib/widgetSchema';
 import { supabase } from '../lib/supabase';
 import { useProduct } from '../lib/ProductContext';
+import {
+  DEFAULT_GRID_CELLS,
+  isDesktopPlatform,
+  nextSectionPosition,
+  normalizeGridCells,
+  sectionsForPlatform,
+  withoutLegacyGridCells,
+  type SectionPlatform,
+} from '../lib/screenSections';
+import {
+  AREA_LIBRE_COMPOSITION_TYPE,
+  validateAreaLibreCompositionReferences,
+} from '../lib/areaLibreComposition';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Switch } from '../components/Switch';
@@ -42,7 +55,10 @@ type Section = {
   type: string;
   config: unknown;
   is_active: boolean;
+  is_desktop: boolean;
+  grid_cells: number;
 };
+type SectionValues = Pick<Section, 'type' | 'config' | 'is_active' | 'is_desktop' | 'grid_cells'>;
 
 function sectionTitle(config: unknown): string | null {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return null;
@@ -68,6 +84,7 @@ export function ScreensPage() {
   const [screens, setScreens] = useState<Screen[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [sections, setSections] = useState<Section[]>([]);
+  const [sectionPlatform, setSectionPlatform] = useState<SectionPlatform>('mobile');
   const [loadingScreens, setLoadingScreens] = useState(true);
   const [loadingSections, setLoadingSections] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +95,7 @@ export function ScreensPage() {
   const [deleteSection, setDeleteSection] = useState<Section | null>(null);
   const [busy, setBusy] = useState(false);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [copyingToDesktopId, setCopyingToDesktopId] = useState<string | null>(null);
   const [i18nTitles, setI18nTitles] = useState<Record<string, string>>({});
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -171,6 +189,10 @@ export function ScreensPage() {
   }, [sections, productId]);
 
   const selected = screens.find((s) => s.id === selectedId) ?? null;
+  const visibleSections = useMemo(
+    () => sectionsForPlatform(sections, sectionPlatform),
+    [sections, sectionPlatform],
+  );
 
   const saveScreen = async (values: { slug: string; title: string; is_active: boolean }) => {
     setBusy(true);
@@ -225,19 +247,23 @@ export function ScreensPage() {
     }
   };
 
-  const saveSection = async (values: { type: string; config: unknown; is_active: boolean }) => {
+  const saveSection = async (values: SectionValues) => {
     if (!selectedId) return;
     setBusy(true);
     setError(null);
     let err: string | null = null;
     if (sectionModal?.record) {
+      const platformChanged = sectionModal.record.is_desktop !== values.is_desktop;
+      const updateValues = platformChanged
+        ? { ...values, position: nextSectionPosition(sections, values.is_desktop) }
+        : values;
       const { error } = await supabase
         .from('product_screen_sections')
-        .update(values)
+        .update(updateValues)
         .eq('id', sectionModal.record.id);
       err = error?.message ?? null;
     } else {
-      const nextPos = sections.reduce((m, s) => Math.max(m, s.position), -1) + 1;
+      const nextPos = nextSectionPosition(sections, values.is_desktop);
       const { error } = await supabase
         .from('product_screen_sections')
         .insert({ ...values, screen_id: selectedId, position: nextPos });
@@ -267,6 +293,27 @@ export function ScreensPage() {
 
   const toggleSection = async (section: Section) => {
     const next = !section.is_active;
+    if (
+      next
+      && section.type === AREA_LIBRE_COMPOSITION_TYPE
+      && (
+        selected?.slug !== 'freemium'
+        || !section.is_desktop
+        || sections.some((candidate) => (
+          candidate.id !== section.id
+          && candidate.type === AREA_LIBRE_COMPOSITION_TYPE
+          && candidate.is_active
+          && candidate.is_desktop
+        ))
+      )
+    ) {
+      setError(
+        selected?.slug !== 'freemium' || !section.is_desktop
+          ? 'Area Libre composition can be activated only on the freemium desktop layout.'
+          : 'Only one active Area Libre composition is allowed.',
+      );
+      return;
+    }
     setSections((prev) => prev.map((s) => (s.id === section.id ? { ...s, is_active: next } : s)));
     const { error } = await supabase.from('product_screen_sections').update({ is_active: next }).eq('id', section.id);
     if (error && selectedId) {
@@ -289,6 +336,8 @@ export function ScreensPage() {
         config: section.config,
         position: tempPos,
         is_active: false,
+        is_desktop: section.is_desktop,
+        grid_cells: normalizeGridCells(section.grid_cells),
       })
       .select('id')
       .maybeSingle();
@@ -299,11 +348,11 @@ export function ScreensPage() {
     }
 
     const copy: Section = { ...section, id: data.id, position: tempPos, is_active: false };
-    const reordered = [...sections];
+    const reordered = [...visibleSections];
     reordered.splice(index + 1, 0, copy);
     const withPos = reordered.map((s, i) => ({ ...s, position: i }));
 
-    const stored = new Map(sections.map((s) => [s.id, s.position]));
+    const stored = new Map(visibleSections.map((s) => [s.id, s.position]));
     stored.set(copy.id, tempPos);
     for (const s of withPos) {
       if (stored.get(s.id) === s.position) continue;
@@ -321,14 +370,44 @@ export function ScreensPage() {
     await loadSections(selectedId);
   };
 
+  const copySectionToDesktop = async (section: Section) => {
+    if (!selectedId || section.is_desktop || copyingToDesktopId || duplicatingId) return;
+    setError(null);
+    setCopyingToDesktopId(section.id);
+
+    const { error } = await supabase
+      .from('product_screen_sections')
+      .insert({
+        screen_id: selectedId,
+        type: section.type,
+        config: section.config,
+        position: nextSectionPosition(sections, true),
+        is_active: section.is_active,
+        is_desktop: true,
+        grid_cells: normalizeGridCells(section.grid_cells),
+      });
+
+    if (error) {
+      setCopyingToDesktopId(null);
+      setError(error.message);
+      return;
+    }
+    await loadSections(selectedId);
+    setCopyingToDesktopId(null);
+  };
+
   const move = async (index: number, dir: -1 | 1) => {
     const target = index + dir;
-    if (target < 0 || target >= sections.length || !selectedId) return;
-    const a = sections[index];
-    const b = sections[target];
-    const reordered = [...sections];
+    if (target < 0 || target >= visibleSections.length || !selectedId) return;
+    const a = visibleSections[index];
+    const b = visibleSections[target];
+    const reordered = [...visibleSections];
     [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
-    setSections(reordered.map((s, i) => ({ ...s, position: i })));
+    const movedSections = reordered.map((s, i) => ({ ...s, position: i }));
+    const positions = new Map(movedSections.map((s) => [s.id, s.position]));
+    setSections((prev) => prev.map((s) => (
+      positions.has(s.id) ? { ...s, position: positions.get(s.id)! } : s
+    )));
 
     const { error: e1 } = await supabase.from('product_screen_sections').update({ position: b.position }).eq('id', a.id);
     const { error: e2 } = await supabase.from('product_screen_sections').update({ position: a.position }).eq('id', b.id);
@@ -343,12 +422,15 @@ export function ScreensPage() {
     setDragIndex(null);
     setOverIndex(null);
     if (from === null || from === dropIndex || !selectedId) return;
-    const prev = sections;
-    const reordered = [...sections];
+    const prev = visibleSections;
+    const reordered = [...visibleSections];
     const [moved] = reordered.splice(from, 1);
     reordered.splice(dropIndex, 0, moved);
     const withPos = reordered.map((s, i) => ({ ...s, position: i }));
-    setSections(withPos);
+    const positions = new Map(withPos.map((s) => [s.id, s.position]));
+    setSections((current) => current.map((s) => (
+      positions.has(s.id) ? { ...s, position: positions.get(s.id)! } : s
+    )));
     const changed = withPos.filter((s, i) => prev.find((o) => o.id === s.id)?.position !== i);
     for (const s of changed) {
       const { error } = await supabase
@@ -433,21 +515,42 @@ export function ScreensPage() {
                 </div>
 
                 <div className="toolbar" style={{ justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                    {sections.length} {sections.length === 1 ? 'section' : 'sections'}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                    <div role="group" aria-label="Section platform" style={{ display: 'flex', gap: 4 }}>
+                      {(['mobile', 'desktop'] as const).map((platform) => (
+                        <button
+                          key={platform}
+                          type="button"
+                          className={`btn btn-sm ${sectionPlatform === platform ? 'btn-primary' : 'btn-ghost'}`}
+                          aria-pressed={sectionPlatform === platform}
+                          onClick={() => {
+                            setSectionPlatform(platform);
+                            setDragIndex(null);
+                            setOverIndex(null);
+                          }}
+                        >
+                          {platform === 'mobile' ? 'Mobile' : 'Desktop'}
+                        </button>
+                      ))}
+                    </div>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                      {visibleSections.length} {visibleSections.length === 1 ? 'section' : 'sections'}
+                    </span>
+                  </div>
                   <button className="btn btn-primary btn-sm" onClick={() => { setError(null); setSectionModal({ record: null }); }}>
-                    <Plus size={15} /> Add Section
+                    <Plus size={15} /> Add {sectionPlatform === 'desktop' ? 'Desktop' : 'Mobile'} Section
                   </button>
                 </div>
 
                 {loadingSections ? (
                   <Spinner />
-                ) : sections.length === 0 ? (
-                  <div className="card empty">No sections yet. Add one to compose this screen.</div>
+                ) : visibleSections.length === 0 ? (
+                  <div className="card empty">
+                    No {sectionPlatform} sections yet. Add one to compose this layout.
+                  </div>
                 ) : (
                   <div className="sections-list">
-                    {sections.map((sec, i) => (
+                    {visibleSections.map((sec, i) => (
                       <div
                         key={sec.id}
                         className={`section-row${sec.is_active ? '' : ' inactive'}`}
@@ -467,41 +570,62 @@ export function ScreensPage() {
                           <button className="btn-icon" disabled={i === 0} onClick={() => move(i, -1)} title="Move up">
                             <ChevronUp size={16} />
                           </button>
-                          <button className="btn-icon" disabled={i === sections.length - 1} onClick={() => move(i, 1)} title="Move down">
+                          <button className="btn-icon" disabled={i === visibleSections.length - 1} onClick={() => move(i, 1)} title="Move down">
                             <ChevronDown size={16} />
                           </button>
                         </div>
                         <div className="section-grip" style={{ cursor: 'grab' }} title="Drag to reorder"><GripVertical size={16} /></div>
                         <div className="section-main">
                           <div className="section-type">
-                            <span style={{ color: 'var(--text-faint)', marginRight: 8 }}>{i + 1}.</span>
-                            {sec.type || <span style={{ color: 'var(--text-faint)' }}>untyped</span>}
-                            {(() => {
-                              const key = sectionTitleKey(sec.config);
-                              const display = (key && i18nTitles[key]) || sectionTitle(sec.config);
-                              const hidden = isTitleHidden(sec.config);
-                              return display ? (
-                                <span style={{
-                                  color: 'var(--text-muted)',
-                                  fontWeight: 400,
-                                  marginLeft: 8,
-                                  ...(hidden ? { textDecoration: 'line-through', opacity: 0.55 } : {}),
-                                }}>
-                                  · {display}{hidden && ' (hidden)'}
-                                </span>
-                              ) : null;
-                            })()}
+                            <span className="section-title-content">
+                              <span style={{ color: 'var(--text-faint)', marginRight: 8 }}>{i + 1}.</span>
+                              {sec.type || <span style={{ color: 'var(--text-faint)' }}>untyped</span>}
+                              <span className="badge" style={{ marginLeft: 8 }}>
+                                {sec.is_desktop ? 'Desktop' : 'Mobile'}
+                              </span>
+                              {(() => {
+                                const key = sectionTitleKey(sec.config);
+                                const display = (key && i18nTitles[key]) || sectionTitle(sec.config);
+                                const hidden = isTitleHidden(sec.config);
+                                return display ? (
+                                  <span style={{
+                                    color: 'var(--text-muted)',
+                                    fontWeight: 400,
+                                    marginLeft: 8,
+                                    ...(hidden ? { textDecoration: 'line-through', opacity: 0.55 } : {}),
+                                  }}>
+                                    · {display}{hidden && ' (hidden)'}
+                                  </span>
+                                ) : null;
+                              })()}
+                            </span>
+                            {sectionPlatform === 'desktop' && (
+                              <span className="badge badge-off section-grid-cells">
+                                {normalizeGridCells(sec.grid_cells)} cells
+                              </span>
+                            )}
                           </div>
                           <div className="section-cfg">{JSON.stringify(sec.config)}</div>
                         </div>
                         <Switch checked={sec.is_active} onChange={() => toggleSection(sec)} />
+                        {!sec.is_desktop && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={copyingToDesktopId !== null || duplicatingId !== null}
+                            style={{ opacity: copyingToDesktopId === sec.id ? 0.5 : undefined }}
+                            onClick={() => copySectionToDesktop(sec)}
+                          >
+                            add to desktop version
+                          </button>
+                        )}
                         <button className="btn-icon" title="Edit" onClick={() => { setError(null); setSectionModal({ record: sec }); }}>
                           <Pencil size={15} />
                         </button>
                         <button
                           className="btn-icon"
                           title="Duplicate"
-                          disabled={duplicatingId !== null}
+                          disabled={duplicatingId !== null || copyingToDesktopId !== null}
                           style={{ opacity: duplicatingId === sec.id ? 0.5 : undefined }}
                           onClick={() => duplicateSection(sec, i)}
                         >
@@ -532,6 +656,9 @@ export function ScreensPage() {
       {sectionModal && (
         <SectionModal
           record={sectionModal.record}
+          defaultIsDesktop={isDesktopPlatform(sectionPlatform)}
+          screenSlug={selected?.slug ?? ''}
+          sections={sections}
           busy={busy}
           onCancel={() => setSectionModal(null)}
           onSubmit={saveSection}
@@ -616,14 +743,20 @@ function ScreenModal({
 
 function SectionModal({
   record,
+  defaultIsDesktop,
+  screenSlug,
+  sections,
   busy,
   onCancel,
   onSubmit,
 }: {
   record: Section | null;
+  defaultIsDesktop: boolean;
+  screenSlug: string;
+  sections: Section[];
   busy: boolean;
   onCancel: () => void;
-  onSubmit: (v: { type: string; config: unknown; is_active: boolean }) => void;
+  onSubmit: (v: SectionValues) => void;
 }) {
   const initialType = record?.type ?? '';
   const initialConfig = record?.config ?? {};
@@ -632,10 +765,23 @@ function SectionModal({
   const [config, setConfig] = useState(() => stringifyWidgetConfig(initialConfig));
   const [advancedJson, setAdvancedJson] = useState(false);
   const [active, setActive] = useState(record?.is_active ?? true);
+  const [isDesktop, setIsDesktop] = useState(
+    initialType === AREA_LIBRE_COMPOSITION_TYPE
+      ? true
+      : record?.is_desktop ?? defaultIsDesktop,
+  );
+  const [gridCells, setGridCells] = useState(() => String(normalizeGridCells(
+    initialType === AREA_LIBRE_COMPOSITION_TYPE
+      ? DEFAULT_GRID_CELLS
+      : record?.grid_cells ?? asWidgetConfig(initialConfig).gridCells,
+  )));
   const [err, setErr] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const widget = WIDGETS.find((candidate) => candidate.type === type);
+  const availableWidgets = WIDGETS.filter((candidate) => (
+    !candidate.allowedScreenSlugs || candidate.allowedScreenSlugs.includes(screenSlug)
+  ));
   const schema = widget?.schema;
   const runtimeManaged = widgetEditorMode(widget) === 'runtime-managed';
 
@@ -671,6 +817,10 @@ function SectionModal({
       nextType,
       nextWidget ? defaultConfigForWidget(nextWidget) : {},
     );
+    if (nextWidget?.desktopOnly) {
+      setIsDesktop(true);
+      setGridCells(String(DEFAULT_GRID_CELLS));
+    }
   };
 
   const applyPreset = (presetKey: string) => {
@@ -714,6 +864,15 @@ function SectionModal({
       setErr('Section type is required.');
       return;
     }
+    const parsedGridCells = Number(gridCells);
+    if (
+      !Number.isInteger(parsedGridCells) ||
+      parsedGridCells < 1 ||
+      parsedGridCells > DEFAULT_GRID_CELLS
+    ) {
+      setErr(`Desktop grid cells must be a whole number from 1 to ${DEFAULT_GRID_CELLS}.`);
+      return;
+    }
     let parsed: unknown = configValue;
 
     if (!schema || advancedJson) {
@@ -732,17 +891,37 @@ function SectionModal({
       }
       const normalized = normalizeTranslations(parsed as Record<string, unknown>);
       const validationErrors = validateWidgetConfig(schema, normalized);
+      if (type === AREA_LIBRE_COMPOSITION_TYPE) {
+        Object.assign(validationErrors, validateAreaLibreCompositionReferences(normalized, {
+          screenSlug,
+          sections,
+          currentSectionId: record?.id,
+          isActive: active,
+          isDesktop,
+        }));
+      }
       setFieldErrors(validationErrors);
       if (Object.keys(validationErrors).length > 0) {
-        setErr('Fix the highlighted configuration fields before saving.');
+        setErr(
+          type === AREA_LIBRE_COMPOSITION_TYPE
+            ? Array.from(new Set(Object.values(validationErrors))).join(' ')
+            : 'Fix the highlighted configuration fields before saving.',
+        );
         if (advancedJson) setConfig(stringifyWidgetConfig(normalized));
         return;
       }
       parsed = normalized;
     }
 
+    parsed = withoutLegacyGridCells(parsed);
     setErr(null);
-    onSubmit({ type: type.trim(), config: parsed, is_active: active });
+    onSubmit({
+      type: type.trim(),
+      config: parsed,
+      is_active: active,
+      is_desktop: widget?.desktopOnly ? true : isDesktop,
+      grid_cells: widget?.desktopOnly ? DEFAULT_GRID_CELLS : parsedGridCells,
+    });
   };
 
   return (
@@ -786,12 +965,12 @@ function SectionModal({
           {type && !WIDGETS.some((candidate) => candidate.type === type) && (
             <option value={type}>{type} (custom)</option>
           )}
-          {WIDGETS.map((w) => (
+          {availableWidgets.map((w) => (
             <option key={w.type} value={w.type}>{w.label}</option>
           ))}
         </select>
         <div className="field-hint" style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
-          {WIDGETS.slice(0, 6).map((w) => (
+          {availableWidgets.slice(0, 6).map((w) => (
             <button key={w.type} type="button" className="btn btn-ghost btn-sm" onClick={() => loadWidgetExample(w.type)}>
               {w.label}
             </button>
@@ -803,8 +982,9 @@ function SectionModal({
           <label>Runtime-managed configuration</label>
           <div className="alert">
             Footer links, copyright, translations, and the widget key are injected by
-            <code> condorito-screen</code>. Only this section&apos;s order and active state
-            can be changed in the Back Office. Existing stored configuration is preserved on save.
+            <code> condorito-screen</code>. Only this section&apos;s order, active state,
+            platform, and desktop width can be changed in the Back Office. Existing stored
+            configuration is preserved on save.
           </div>
         </div>
       ) : schema && !advancedJson ? (
@@ -860,6 +1040,33 @@ function SectionModal({
       )}
       <div className="field">
         <Switch checked={active} onChange={setActive} label="Active (rendered by the app)" />
+      </div>
+      <div className="field">
+        <label htmlFor="grid-cells">Desktop grid cells</label>
+        <input
+          id="grid-cells"
+          type="number"
+          min={1}
+          max={DEFAULT_GRID_CELLS}
+          step={1}
+          value={gridCells}
+          disabled={widget?.desktopOnly}
+          onChange={(event) => {
+            setGridCells(event.target.value);
+            setErr(null);
+          }}
+        />
+        <div className="field-hint">
+          Width in the desktop 12-column layout. Mobile always uses 12 cells.
+        </div>
+      </div>
+      <div className="field">
+        <Switch
+          checked={isDesktop}
+          onChange={setIsDesktop}
+          disabled={widget?.desktopOnly}
+          label="Is rendered in desktop version only"
+        />
       </div>
     </Modal>
   );

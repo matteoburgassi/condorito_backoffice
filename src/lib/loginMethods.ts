@@ -15,6 +15,8 @@ export function loginMethodLabel(type: string): string {
       return 'Email and password';
     case 'msisdn_pin':
       return 'Mobile number and PIN';
+    case 'msisdn_otp':
+      return 'Mobile number and OTP';
     default:
       return type.split('_').join(' ');
   }
