@@ -476,7 +476,17 @@ describe('hero-image schema form', () => {
     expect(validateWidgetConfig(heroImage.schema, {
       asset: 'personajes-top-img',
       aspectRatio: 1.7,
+      caption: 'Descubre nuestros personajes',
     })).toEqual({});
+  });
+
+  it('exposes an optional translatable desktop caption', () => {
+    expect(heroImage.schema.properties?.caption).toMatchObject({
+      type: 'string',
+      'x-translatable': true,
+    });
+    expect(defaultConfigForWidget(heroImage)).not.toHaveProperty('caption');
+    expect(translatableProperties(heroImage.schema).map(({ key }) => key)).toContain('caption');
   });
 
   it('parses number input while preserving empty and invalid in-progress values', () => {
