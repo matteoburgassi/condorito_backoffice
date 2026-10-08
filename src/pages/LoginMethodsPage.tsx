@@ -3,9 +3,13 @@ import { ShieldCheck } from 'lucide-react';
 import { Spinner } from '../components/Spinner';
 import { Switch } from '../components/Switch';
 import {
+  buildPlatformsUpdate,
   buildSignupUpdate,
+  getLoginMethodPlatforms,
   loginMethodLabel,
   validateEnabledChange,
+  validatePlatformChange,
+  type LoginMethodPlatform,
   type LoginMethodRow,
 } from '../lib/loginMethods';
 import { useProduct } from '../lib/ProductContext';
@@ -100,6 +104,24 @@ export function LoginMethodsPage() {
     );
   };
 
+  const changePlatform = async (
+    method: LoginMethodRow,
+    platform: LoginMethodPlatform,
+    enabled: boolean,
+  ) => {
+    const validationError = validatePlatformChange(method, platform, enabled);
+    if (validationError) {
+      setError(validationError);
+      setSuccess(null);
+      return;
+    }
+    await updateMethod(
+      method,
+      buildPlatformsUpdate(method, platform, enabled),
+      `${loginMethodLabel(method.type)} ${platform} ${enabled ? 'enabled' : 'disabled'}.`,
+    );
+  };
+
   const changeDefault = async (method: LoginMethodRow) => {
     if (!productId || method.is_default) return;
     if (!method.enabled) {
@@ -173,6 +195,7 @@ export function LoginMethodsPage() {
             <div className="login-method-list">
               {methods.map((method) => {
                 const saving = savingId === method.id;
+                const platforms = getLoginMethodPlatforms(method.config);
                 return (
                   <section className="card login-method-card" key={method.id}>
                     <div className="login-method-heading">
@@ -210,6 +233,34 @@ export function LoginMethodsPage() {
                           checked={method.allow_signup}
                           disabled={saving}
                           onChange={(allowSignup) => void changeSignup(method, allowSignup)}
+                        />
+                      </div>
+
+                      <div className="login-method-control">
+                        <div>
+                          <strong>Desktop</strong>
+                          <span>Offer this method on desktop web.</span>
+                        </div>
+                        <Switch
+                          checked={platforms.desktop}
+                          disabled={saving}
+                          onChange={(enabled) =>
+                            void changePlatform(method, 'desktop', enabled)
+                          }
+                        />
+                      </div>
+
+                      <div className="login-method-control">
+                        <div>
+                          <strong>Mobile</strong>
+                          <span>Offer this method on mobile web.</span>
+                        </div>
+                        <Switch
+                          checked={platforms.mobile}
+                          disabled={saving}
+                          onChange={(enabled) =>
+                            void changePlatform(method, 'mobile', enabled)
+                          }
                         />
                       </div>
 

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildPlatformsUpdate,
   buildSignupUpdate,
+  getLoginMethodPlatforms,
   loginMethodLabel,
   validateEnabledChange,
+  validatePlatformChange,
   type LoginMethodRow,
 } from '../src/lib/loginMethods';
 
@@ -24,6 +27,39 @@ describe('login method configuration helpers', () => {
   it('labels supported methods for administrators', () => {
     expect(loginMethodLabel('email_password')).toBe('Email and password');
     expect(loginMethodLabel('msisdn_pin')).toBe('Mobile number and PIN');
+    expect(loginMethodLabel('msisdn_otp')).toBe('Mobile number and OTP');
+    expect(loginMethodLabel('msisdn_no_pin')).toBe('Mobile number (no PIN)');
+  });
+
+  it('defaults platforms to desktop and mobile when unset', () => {
+    expect(getLoginMethodPlatforms(null)).toEqual({ desktop: true, mobile: true });
+    expect(getLoginMethodPlatforms({})).toEqual({ desktop: true, mobile: true });
+  });
+
+  it('reads platforms from config', () => {
+    expect(
+      getLoginMethodPlatforms({ platforms: { desktop: true, mobile: false } }),
+    ).toEqual({ desktop: true, mobile: false });
+  });
+
+  it('updates a platform flag without losing other config', () => {
+    expect(buildPlatformsUpdate(method(), 'mobile', false)).toEqual({
+      config: {
+        allow_forgot_password: true,
+        custom: 'preserved',
+        platforms: { desktop: true, mobile: false },
+      },
+    });
+  });
+
+  it('rejects turning off the last platform on an enabled method', () => {
+    const row = method({
+      config: { platforms: { desktop: true, mobile: false } },
+    });
+    expect(validatePlatformChange(row, 'desktop', false)).toBe(
+      'Keep at least one platform (desktop or mobile) while this method is enabled.',
+    );
+    expect(validatePlatformChange(row, 'mobile', true)).toBeNull();
   });
 
   it('updates both signup flags without losing advanced configuration', () => {
