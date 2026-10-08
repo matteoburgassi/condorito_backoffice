@@ -24,6 +24,8 @@ describe('login method configuration helpers', () => {
   it('labels supported methods for administrators', () => {
     expect(loginMethodLabel('email_password')).toBe('Email and password');
     expect(loginMethodLabel('msisdn_pin')).toBe('Mobile number and PIN');
+    expect(loginMethodLabel('msisdn_otp')).toBe('Mobile number and OTP');
+    expect(loginMethodLabel('msisdn_no_pin')).toBe('Mobile number (no PIN)');
   });
 
   it('updates both signup flags without losing advanced configuration', () => {
