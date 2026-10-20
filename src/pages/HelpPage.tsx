@@ -49,6 +49,30 @@ export function HelpPage() {
       </div>
 
       <div className="doc-section">
+        <h2>Supabase branches &amp; publishing</h2>
+        <p>
+          The backoffice connects to one Supabase <strong>branch</strong> at a time, chosen in your local{' '}
+          <Code>.env</Code>. Staging and production URLs are both defined there;{' '}
+          <Code>VITE_SUPABASE_TARGET</Code> selects which branch you edit.
+        </p>
+        <div className="card doc-card">
+          <p style={{ marginBottom: 6 }}>
+            <strong>Staging</strong> (<Code>VITE_SUPABASE_STAGING_URL</Code>) — default for day-to-day CMS edits.
+          </p>
+          <p style={{ marginBottom: 6 }}>
+            <strong>Production branch</strong> (<Code>VITE_SUPABASE_PROD_URL</Code>) — live app data. Set{' '}
+            <Code>VITE_SUPABASE_TARGET=prod</Code> only when you intentionally need to connect to production; the
+            top bar shows which branch is active.
+          </p>
+          <p style={{ margin: 0 }}>
+            Copy <Code>.env.example</Code> to <Code>.env</Code>, fill both anon keys, and restart the dev server after
+            changing <Code>VITE_SUPABASE_TARGET</Code>. CMS publish from staging → production branch (edge function) is
+            planned separately; schema on the prod branch is promoted via Supabase branch merge.
+          </p>
+        </div>
+      </div>
+
+      <div className="doc-section">
         <h2>Screens &amp; sections</h2>
         <p>
           A screen’s <Code>slug</Code> must match what the app requests. Valid slugs:{' '}

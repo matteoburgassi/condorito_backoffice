@@ -195,6 +195,11 @@ fieldset.field { padding: 8px; border: 1px solid var(--border); border-radius: v
 .pill-select label { margin: 0; }
 .pill-select select { width: auto; border: none; background: transparent; padding: 5px 8px; }
 .pill-select select:focus { box-shadow: none; }
+.supabase-env-pill { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; padding: 6px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface-2); white-space: nowrap; }
+.supabase-env-pill code { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+.supabase-env-pill--staging { border-color: rgba(46,160,67,0.35); color: #4ade80; }
+.supabase-env-pill--prod { border-color: rgba(251,191,36,0.45); color: #fbbf24; }
+
 
 /* Login methods */
 .login-method-list { display: grid; gap: 16px; }

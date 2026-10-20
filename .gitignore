@@ -1,4 +1,9 @@
 node_modules/
+dist/
 .env
+.env.local
+.env.*.local
+*.tsbuildinfo
+.DS_Store
 !supabase/migrations/20261001104500_add_desktop_screen_sections.sql
 !supabase/migrations/20261001160000_add_section_grid_cells.sql

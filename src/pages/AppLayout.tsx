@@ -5,6 +5,13 @@ import { VISIBLE_RESOURCES, VISIBLE_GROUPS } from '../lib/resources';
 import { ResourceIcon } from '../components/ResourceIcon';
 import { useAuth } from '../lib/AuthContext';
 import { useProduct } from '../lib/ProductContext';
+import {
+  prodSupabaseConfig,
+  stagingSupabaseConfig,
+  activeSupabaseConfig,
+  supabaseProjectRef,
+  supabaseTarget,
+} from '../lib/supabase';
 
 export function AppLayout() {
   const { user, signOut } = useAuth();
@@ -70,6 +77,17 @@ export function AppLayout() {
             <button className="btn-icon burger" onClick={() => setOpen((v) => !v)} aria-label="Toggle menu">
               <MenuIcon size={20} />
             </button>
+            <div
+              className={`supabase-env-pill supabase-env-pill--${supabaseTarget}`}
+              title={
+                supabaseTarget === 'staging'
+                  ? stagingSupabaseConfig.url
+                  : prodSupabaseConfig?.url ?? stagingSupabaseConfig.url
+              }
+            >
+              {supabaseTarget === 'staging' ? 'Staging branch' : 'Production branch'}
+              <code>{supabaseProjectRef(activeSupabaseConfig.url)}</code>
+            </div>
             {products.length > 0 && (
               <div className="pill-select">
                 <label htmlFor="product">Product</label>
