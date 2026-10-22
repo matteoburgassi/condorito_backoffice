@@ -1,12 +1,15 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { supabase } from './supabase';
 
+export type LegalDocumentsSource = 'CUSTOM' | 'ATOM';
+
 export type Product = {
   id: string;
   slug: string;
   display_name: string;
   country_code: string | null;
   environment: string | null;
+  legal_documents_source: LegalDocumentsSource;
 };
 
 type ProductState = {
@@ -14,6 +17,7 @@ type ProductState = {
   current: Product | null;
   productId: string | null;
   setProductId: (id: string) => void;
+  setLegalDocumentsSource: (source: LegalDocumentsSource) => Promise<void>;
   loading: boolean;
   error: string | null;
 };
@@ -32,13 +36,13 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     (async () => {
       const { data, error } = await supabase
         .from('product_products')
-        .select('id, slug, display_name, country_code, environment')
+        .select('id, slug, display_name, country_code, environment, legal_documents_source')
         .order('display_name');
       if (!active) return;
       if (error) {
         setError(error.message);
       } else if (data) {
-        setProducts(data);
+        setProducts(data as Product[]);
         const stored = localStorage.getItem(STORE_KEY);
         const valid = stored && data.some((p) => p.id === stored) ? stored : data[0]?.id ?? null;
         setProductIdState(valid);
@@ -55,10 +59,26 @@ export function ProductProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORE_KEY, id);
   };
 
+  const setLegalDocumentsSource = async (source: LegalDocumentsSource) => {
+    if (!productId) return;
+    const { data, error } = await supabase
+      .from('product_products')
+      .update({ legal_documents_source: source })
+      .eq('id', productId)
+      .select('id');
+    if (error) throw new Error(error.message);
+    if (!data?.length) throw new Error('Product not updated. Check admin permissions.');
+    setProducts((prev) =>
+      prev.map((p) => (p.id === productId ? { ...p, legal_documents_source: source } : p)),
+    );
+  };
+
   const current = products.find((p) => p.id === productId) ?? null;
 
   return (
-    <ProductContext.Provider value={{ products, current, productId, setProductId, loading, error }}>
+    <ProductContext.Provider
+      value={{ products, current, productId, setProductId, setLegalDocumentsSource, loading, error }}
+    >
       {children}
     </ProductContext.Provider>
   );
