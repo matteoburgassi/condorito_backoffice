@@ -1,54 +1,5 @@
 
-
-[functions.bolt-auth-proxy]
-verify_jwt = false
-
-[functions.comic-preview]
-verify_jwt = false
-
-[functions.condorito-characters]
-verify_jwt = false
-
-[functions.condorito-comics]
-verify_jwt = false
-
-[functions.condorito-home]
-verify_jwt = false
-
-[functions.condorito-jokes]
-verify_jwt = false
-
-[functions.condorito-reading-progress]
-verify_jwt = false
-
-[functions.condorito-screen]
-verify_jwt = false
-
-[functions.condorito-subscription]
-verify_jwt = false
-
-[functions.condorito-wishlist]
-verify_jwt = false
-
-[functions.generate-thumbnails]
-verify_jwt = false
-
-[functions.get-product-config]
-verify_jwt = false
-
 [functions.get-product-document]
-verify_jwt = false
-
-[functions.get-profile]
-verify_jwt = false
-
-[functions.pdf-proxy]
-verify_jwt = false
-
-[functions.pulsar-sync]
-verify_jwt = false
-
-[functions.upload-covers]
 verify_jwt = false
 
 [functions.get-atom-legal-document]

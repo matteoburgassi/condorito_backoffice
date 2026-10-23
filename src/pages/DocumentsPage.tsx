@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Pencil, Trash2, FileText, Inbox, RefreshCw } from 'lucide-react';
 import { FunctionsHttpError } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { useProduct, type LegalDocumentsSource, type Product } from '../lib/ProductContext';
+import { useProduct, type LegalDocumentsSource } from '../lib/ProductContext';
 import { Modal } from '../components/Modal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { Spinner } from '../components/Spinner';
@@ -16,6 +16,13 @@ type DocumentRow = {
   title: string;
   version: number;
   updated_at: string;
+  is_atom: boolean;
+};
+
+type DocumentValues = { slug: string; path: string; title: string; version: number; is_atom: boolean };
+
+type AtomDiscoveryResponse = {
+  formatsDiscovered: string[];
 };
 
 type ContentRow = {
@@ -34,12 +41,6 @@ type ContentValues = {
   is_desktop: boolean;
 };
 
-type AtomDocument = {
-  id: string;
-  name: string;
-  documentFormat: string;
-};
-
 const ATOM_FUNCTION = 'get-atom-legal-document';
 const ATOM_DEFAULT_LOCALE = 'es';
 
@@ -56,11 +57,47 @@ async function invokeAtom<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
+function useAtomProductId(productId: string | null) {
+  const [atomProductId, setAtomProductId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!productId) {
+      setAtomProductId(null);
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from('product_config')
+        .select('value')
+        .eq('product_id', productId)
+        .eq('key', 'ATOM_PRODUCT_ID')
+        .maybeSingle();
+      if (!active) return;
+      setError(error?.message ?? null);
+      setAtomProductId(data?.value?.trim() || null);
+      setLoading(false);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [productId]);
+
+  return { atomProductId, loading, error };
+}
+
 export function DocumentsPage() {
   const { productId, current, setLegalDocumentsSource } = useProduct();
   const source: LegalDocumentsSource = current?.legal_documents_source ?? 'CUSTOM';
+  const isAtomView = source === 'ATOM';
+  const atom = useAtomProductId(productId);
   const [savingSource, setSavingSource] = useState(false);
   const [docs, setDocs] = useState<DocumentRow[]>([]);
+  const [translationValues, setTranslationValues] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [contents, setContents] = useState<ContentRow[]>([]);
   const [contentPlatform, setContentPlatform] = useState<SectionPlatform>('mobile');
@@ -83,19 +120,48 @@ export function DocumentsPage() {
       return;
     }
     setLoadingDocs(true);
-    const { data, error } = await supabase
-      .from('product_documents')
-      .select('*')
-      .eq('product_id', productId)
-      .order('slug');
-    if (error) setError(error.message);
-    else {
+    const [{ data, error }, { data: defaultLanguage }] = await Promise.all([
+      supabase
+        .from('product_documents')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('is_atom', isAtomView)
+        .order('slug'),
+      supabase
+        .from('product_languages')
+        .select('code')
+        .eq('product_id', productId)
+        .eq('is_default', true)
+        .maybeSingle(),
+    ]);
+    if (error) {
+      setError(error.message);
+    } else {
       const list = (data as DocumentRow[]) ?? [];
       setDocs(list);
       setSelectedId((prev) => (prev && list.some((d) => d.id === prev) ? prev : list[0]?.id ?? null));
+
+      const languageCode = defaultLanguage?.code ?? 'es';
+      const { data: translations, error: translationsError } = await supabase
+        .from('product_translations')
+        .select('namespace, key, value')
+        .eq('product_id', productId)
+        .eq('language_code', languageCode);
+      if (translationsError) {
+        setError(translationsError.message);
+      } else {
+        setTranslationValues(
+          Object.fromEntries(
+            (translations ?? []).map((translation) => [
+              `${translation.namespace}.${translation.key}`,
+              translation.value,
+            ]),
+          ),
+        );
+      }
     }
     setLoadingDocs(false);
-  }, [productId]);
+  }, [productId, isAtomView]);
 
   const loadContents = useCallback(async (documentId: string) => {
     setLoadingContents(true);
@@ -114,18 +180,21 @@ export function DocumentsPage() {
   }, [loadDocs]);
 
   useEffect(() => {
-    if (selectedId) loadContents(selectedId);
+    if (selectedId && !isAtomView) loadContents(selectedId);
     else setContents([]);
-  }, [selectedId, loadContents]);
+  }, [selectedId, isAtomView, loadContents]);
 
   const selected = docs.find((d) => d.id === selectedId) ?? null;
+  const documentDisplayTitle = useCallback(
+    (document: DocumentRow) => translationValues[document.title] || document.title,
+    [translationValues],
+  );
   const isDesktop = isDesktopPlatform(contentPlatform);
   const visibleContents = useMemo(
     () => contents.filter((c) => c.is_desktop === isDesktop),
     [contents, isDesktop],
   );
-
-  const saveDoc = async (values: { slug: string; path: string; title: string; version: number }) => {
+  const saveDoc = async (values: DocumentValues) => {
     setBusy(true);
     setError(null);
     let err: string | null = null;
@@ -283,12 +352,10 @@ export function DocumentsPage() {
             {current ? ` · ${current.display_name}` : ''}.
           </p>
         </div>
-        {source === 'CUSTOM' && (
-          <button className="btn btn-primary" onClick={() => setDocModal({ record: null })}>
-            <Plus size={16} />
-            New document
-          </button>
-        )}
+        <button className="btn btn-primary" onClick={() => setDocModal({ record: null })}>
+          <Plus size={16} />
+          New document
+        </button>
       </div>
 
       <div role="group" aria-label="Legal documents source" style={{ display: 'flex', gap: 4, marginBottom: 16 }}>
@@ -307,21 +374,22 @@ export function DocumentsPage() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
-
-      {source === 'ATOM' && current ? (
-        <AtomDocumentsPanel key={current.id} product={current} />
-      ) : (
+      {isAtomView && atom.error && <div className="alert alert-error">{atom.error}</div>}
       <div className="grid-2" style={{ alignItems: 'start' }}>
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)', fontWeight: 600, fontSize: 13 }}>
-            Documents
+            {isAtomView ? 'ATOM documents' : 'Documents'}
           </div>
           {loadingDocs ? (
             <Spinner label="Loading…" />
           ) : docs.length === 0 ? (
             <div className="empty">
               <Inbox size={36} className="empty-icon" style={{ margin: '0 auto 12px' }} />
-              <div>No documents yet. Create <code>cgu</code> or <code>privacy-policy</code>.</div>
+              {isAtomView ? (
+                <div>No ATOM documents yet. Create one and pick its ATOM format.</div>
+              ) : (
+                <div>No documents yet. Create <code>cgu</code> or <code>privacy-policy</code>.</div>
+              )}
             </div>
           ) : (
             <div>
@@ -345,9 +413,10 @@ export function DocumentsPage() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <FileText size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>{d.title}</div>
+                      <div style={{ fontWeight: 600, fontSize: 14 }}>{documentDisplayTitle(d)}</div>
                       <div style={{ fontSize: 12, color: 'var(--text-faint)', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-                        {d.slug} · v{d.version}
+                        {d.is_atom ? 'documentFormat ' : 'slug '}
+                        <code className="doc-inline">{d.slug}</code> · v{d.version}
                       </div>
                     </div>
                   </div>
@@ -360,20 +429,30 @@ export function DocumentsPage() {
         <div>
           {!selected ? (
             <div className="card empty">
-              <div>Select a document to edit locale content.</div>
+              <div>{isAtomView ? 'Select a document to preview it.' : 'Select a document to edit locale content.'}</div>
             </div>
           ) : (
             <>
               <div className="card" style={{ marginBottom: 14, padding: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 16 }}>{selected.title}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontWeight: 700, fontSize: 16 }}>{documentDisplayTitle(selected)}</div>
+                      {selected.is_atom && <span className="badge">ATOM</span>}
+                    </div>
                     <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4 }}>
-                      Slug <code className="doc-inline">{selected.slug}</code>
-                      {' · '}
-                      path <code className="doc-inline">{selected.path}</code>
+                      {selected.is_atom ? 'documentFormat' : 'Slug'} <code className="doc-inline">{selected.slug}</code>
+                      {!selected.is_atom && (
+                        <>
+                          {' · '}
+                          path <code className="doc-inline">{selected.path}</code>
+                        </>
+                      )}
                       {' · '}
                       v{selected.version}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 6 }}>
+                      Translation key: <code className="doc-inline">{selected.title}</code>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 6 }}>
                       App route: <code className="doc-inline">/document?slug={selected.slug}</code>
@@ -392,6 +471,11 @@ export function DocumentsPage() {
                 </div>
               </div>
 
+              {selected.is_atom ? (
+                atom.atomProductId && (
+                  <AtomPreview key={selected.id} atomProductId={atom.atomProductId} document={selected} />
+                )
+              ) : (
               <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div
                   style={{
@@ -480,15 +564,17 @@ export function DocumentsPage() {
                   </div>
                 )}
               </div>
+              )}
             </>
           )}
         </div>
       </div>
-      )}
 
       {docModal && (
         <DocModal
           record={docModal.record}
+          defaultIsAtom={isAtomView}
+          atomProductId={atom.atomProductId}
           busy={busy}
           onCancel={() => setDocModal(null)}
           onSubmit={saveDoc}
@@ -506,7 +592,11 @@ export function DocumentsPage() {
       {deleteDoc && (
         <ConfirmDialog
           title="Delete document?"
-          message={`This removes “${deleteDoc.title}” and all locale content. This cannot be undone.`}
+          message={
+            deleteDoc.is_atom
+              ? `This removes “${deleteDoc.title}” from the app. The ATOM document itself is not changed.`
+              : `This removes “${deleteDoc.title}” and all locale content. This cannot be undone.`
+          }
           onConfirm={confirmDeleteDoc}
           onCancel={() => setDeleteDoc(null)}
           busy={busy}
@@ -527,32 +617,82 @@ export function DocumentsPage() {
 
 function DocModal({
   record,
+  defaultIsAtom,
+  atomProductId,
   busy,
   onCancel,
   onSubmit,
 }: {
   record: DocumentRow | null;
+  defaultIsAtom: boolean;
+  atomProductId: string | null;
   busy: boolean;
   onCancel: () => void;
-  onSubmit: (v: { slug: string; path: string; title: string; version: number }) => void;
+  onSubmit: (v: DocumentValues) => void;
 }) {
   const [slug, setSlug] = useState(record?.slug ?? '');
   const [path, setPath] = useState(record?.path ?? '');
   const [title, setTitle] = useState(record?.title ?? '');
   const [version, setVersion] = useState(record?.version ?? 1);
+  const [isAtom, setIsAtom] = useState(record?.is_atom ?? defaultIsAtom);
+  const [formats, setFormats] = useState<string[]>([]);
+  const [loadingFormats, setLoadingFormats] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isAtom || !atomProductId) {
+      setFormats([]);
+      setLoadingFormats(false);
+      return;
+    }
+
+    let active = true;
+    setLoadingFormats(true);
+    setErr(null);
+    invokeAtom<AtomDiscoveryResponse>({
+      mode: 'discover',
+      atom_product_id: atomProductId,
+      language: ATOM_DEFAULT_LOCALE,
+    })
+      .then((data) => {
+        if (active) setFormats(data.formatsDiscovered ?? []);
+      })
+      .catch((e) => {
+        if (active) setErr(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (active) setLoadingFormats(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAtom, atomProductId]);
+
+  const formatOptions = useMemo(() => {
+    const options = [...formats];
+    if (record?.is_atom && record.slug && !options.includes(record.slug)) {
+      options.unshift(record.slug);
+    }
+    return options;
+  }, [formats, record]);
 
   const submit = () => {
     if (!slug.trim()) {
-      setErr('Slug is required.');
+      setErr(isAtom ? 'Select an ATOM format.' : 'Slug is required.');
       return;
     }
     if (!title.trim()) {
-      setErr('Title is required.');
+      setErr('Translation key is required.');
       return;
     }
-    const pathVal = path.trim() || slug.trim();
-    onSubmit({ slug: slug.trim(), path: pathVal, title: title.trim(), version: Number(version) || 1 });
+    if (!title.trim().includes('.')) {
+      setErr('Translation key must use namespace.key format.');
+      return;
+    }
+    const slugVal = slug.trim();
+    const pathVal = isAtom ? slugVal : path.trim() || slugVal;
+    onSubmit({ slug: slugVal, path: pathVal, title: title.trim(), version: Number(version) || 1, is_atom: isAtom });
   };
 
   return (
@@ -570,19 +710,70 @@ function DocModal({
     >
       {err && <div className="alert alert-error">{err}</div>}
       <div className="field">
-        <label htmlFor="doc-slug">Slug <span style={{ color: 'var(--primary)' }}>*</span></label>
-        <input id="doc-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="cgu" />
-        <div className="field-hint">Must match the app route, e.g. <code>cgu</code>, <code>privacy-policy</code>.</div>
+        <label>Atom</label>
+        <div role="group" aria-label="Document type" style={{ display: 'flex', gap: 4 }}>
+          <button
+            type="button"
+            className={`btn btn-sm ${isAtom ? 'btn-primary' : 'btn-ghost'}`}
+            aria-pressed={isAtom}
+            onClick={() => setIsAtom(true)}
+            disabled={busy}
+          >
+            Atom
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm ${!isAtom ? 'btn-primary' : 'btn-ghost'}`}
+            aria-pressed={!isAtom}
+            onClick={() => setIsAtom(false)}
+            disabled={busy}
+          >
+            Custom
+          </button>
+        </div>
+        {isAtom !== defaultIsAtom && (
+          <div className="field-hint" style={{ color: 'var(--primary)' }}>
+            Comparirà nel tab {isAtom ? 'Atom' : 'Custom'}.
+          </div>
+        )}
+      </div>
+      <div className="field">
+        <label htmlFor="doc-slug">{isAtom ? <>Format</> : <>Slug</>} <span style={{ color: 'var(--primary)' }}>*</span></label>
+        {isAtom ? (
+          <select
+            id="doc-slug"
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            disabled={busy || loadingFormats}
+          >
+            <option value="">{loadingFormats ? 'Loading ATOM formats…' : 'Select a format…'}</option>
+            {formatOptions.map((format) => (
+              <option key={format} value={format}>
+                {format}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input id="doc-slug" value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="cgu" />
+        )}
+        <div className="field-hint">
+          {isAtom
+            ? <>Document format to retrieve the html from ATOM</>
+            : <>Must match the app route, e.g. <code>cgu</code>, <code>privacy-policy</code>.</>}
+        </div>
       </div>
       <div className="field">
         <label htmlFor="doc-title">Title <span style={{ color: 'var(--primary)' }}>*</span></label>
-        <input id="doc-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Términos y Condiciones" />
+        <input id="doc-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="documents.privacy_policy" />
+        <div className="field-hint">Translation key used to display the document name, e.g. <code>documents.privacy_policy</code>.</div>
       </div>
-      <div className="field">
-        <label htmlFor="doc-path">Path</label>
-        <input id="doc-path" value={path} onChange={(e) => setPath(e.target.value)} placeholder="cgu" />
-        <div className="field-hint">Optional legacy path; defaults to the slug.</div>
-      </div>
+      {!isAtom && (
+        <div className="field">
+          <label htmlFor="doc-path">Path</label>
+          <input id="doc-path" value={path} onChange={(e) => setPath(e.target.value)} placeholder="cgu" />
+          <div className="field-hint">Optional legacy path; defaults to the slug.</div>
+        </div>
+      )}
       <div className="field">
         <label htmlFor="doc-version">Version</label>
         <input
@@ -693,186 +884,84 @@ function ContentModal({
   );
 }
 
-function AtomDocumentsPanel({ product }: { product: Product }) {
-  const [atomProductId, setAtomProductId] = useState<string | null>(null);
-  const [loadingConfig, setLoadingConfig] = useState(true);
+function AtomPreview({ atomProductId, document }: { atomProductId: string; document: DocumentRow }) {
   const [locale, setLocale] = useState(ATOM_DEFAULT_LOCALE);
-  const [discoveredLocale, setDiscoveredLocale] = useState(ATOM_DEFAULT_LOCALE);
-  const [documents, setDocuments] = useState<AtomDocument[]>([]);
-  const [loadingDocs, setLoadingDocs] = useState(false);
+  const [html, setHtml] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{ doc: AtomDocument; html: string | null; error: string | null } | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      const { data, error } = await supabase
-        .from('product_config')
-        .select('value')
-        .eq('product_id', product.id)
-        .eq('key', 'ATOM_PRODUCT_ID')
-        .maybeSingle();
-      if (!active) return;
-      if (error) setError(error.message);
-      setAtomProductId(data?.value?.trim() || null);
-      setLoadingConfig(false);
-    })();
-    return () => {
-      active = false;
-    };
-  }, [product.id]);
-
-  const discover = useCallback(async (lang: string) => {
-    if (!atomProductId || !lang) return;
-    setLoadingDocs(true);
+  const load = useCallback(async (lang: string) => {
+    if (!lang) return;
+    setLoading(true);
     setError(null);
-    setDiscoveredLocale(lang);
-    try {
-      const data = await invokeAtom<{ documents: AtomDocument[] }>({
-        mode: 'discover',
-        atom_product_id: atomProductId,
-        language: lang,
-      });
-      setDocuments(data.documents ?? []);
-    } catch (e) {
-      setDocuments([]);
-      setError(e instanceof Error ? e.message : String(e));
-    }
-    setLoadingDocs(false);
-  }, [atomProductId]);
-
-  useEffect(() => {
-    discover(ATOM_DEFAULT_LOCALE);
-  }, [discover]);
-
-  const openPreview = async (doc: AtomDocument) => {
-    if (!atomProductId) return;
-    setPreview({ doc, html: null, error: null });
     try {
       const data = await invokeAtom<{ document: { body_html: string } }>({
         mode: 'document',
         atom_product_id: atomProductId,
-        language: discoveredLocale,
-        format: doc.documentFormat,
+        language: lang,
+        format: document.slug,
       });
-      setPreview((prev) => (prev?.doc.id === doc.id ? { doc, html: data.document.body_html, error: null } : prev));
+      setHtml(data.document.body_html);
     } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      setPreview((prev) => (prev?.doc.id === doc.id ? { doc, html: null, error: message } : prev));
+      setHtml(null);
+      setError(e instanceof Error ? e.message : String(e));
     }
-  };
+    setLoading(false);
+  }, [atomProductId, document.slug]);
 
-  if (loadingConfig) return <Spinner label="Loading…" />;
-
-  if (!atomProductId) {
-    return (
-      <div className="alert alert-error">
-        Missing <code className="doc-inline">ATOM_PRODUCT_ID</code> in Config Values for {product.display_name}.
-      </div>
-    );
-  }
+  useEffect(() => {
+    load(ATOM_DEFAULT_LOCALE);
+  }, [load]);
 
   return (
-    <>
-      <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            flexWrap: 'wrap',
-            padding: '14px 16px',
-            borderBottom: '1px solid var(--border)',
+    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          flexWrap: 'wrap',
+          padding: '14px 16px',
+          borderBottom: '1px solid var(--border)',
+        }}
+      >
+        <span style={{ fontWeight: 600, fontSize: 13 }}>
+          ATOM preview · product <code className="doc-inline">{atomProductId}</code>
+        </span>
+        <form
+          style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            load(locale.trim().toLowerCase());
           }}
         >
-          <div style={{ fontWeight: 600, fontSize: 13 }}>
-            ATOM documents · product <code className="doc-inline">{atomProductId}</code>
-          </div>
-          <form
-            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-            onSubmit={(e) => {
-              e.preventDefault();
-              discover(locale.trim().toLowerCase());
-            }}
-          >
-            <label htmlFor="atom-locale" style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Locale</label>
-            <input
-              id="atom-locale"
-              value={locale}
-              onChange={(e) => setLocale(e.target.value)}
-              placeholder="es"
-              style={{ width: 72 }}
-            />
-            <button type="submit" className="btn btn-ghost btn-sm" disabled={loadingDocs}>
-              <RefreshCw size={14} />
-              Refresh
-            </button>
-          </form>
-        </div>
-        {error && <div className="alert alert-error" style={{ margin: 16 }}>{error}</div>}
-        {loadingDocs ? (
-          <Spinner label="Loading…" />
-        ) : documents.length === 0 ? (
-          <div className="empty" style={{ padding: 40 }}>
-            <Inbox size={36} className="empty-icon" style={{ margin: '0 auto 12px' }} />
-            <div>No ATOM documents available for locale <code>{discoveredLocale}</code>.</div>
-          </div>
-        ) : (
-          <div>
-            {documents.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                onClick={() => openPreview(d)}
-                className="doc-list-item"
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '12px 16px',
-                  border: 'none',
-                  borderBottom: '1px solid var(--border)',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  color: 'var(--text)',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <FileText size={16} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>{d.name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text-faint)', fontFamily: 'ui-monospace, Menlo, monospace' }}>
-                      {d.documentFormat}
-                    </div>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
+          <label htmlFor="atom-preview-locale" style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Locale</label>
+          <input
+            id="atom-preview-locale"
+            value={locale}
+            onChange={(e) => setLocale(e.target.value)}
+            placeholder="es"
+            style={{ width: 72 }}
+          />
+          <button type="submit" className="btn btn-ghost btn-sm" disabled={loading}>
+            <RefreshCw size={14} />
+            Refresh
+          </button>
+        </form>
       </div>
-
-      {preview && (
-        <Modal
-          title={`${preview.doc.name} (${discoveredLocale})`}
-          onClose={() => setPreview(null)}
-          wide
-          footer={<button className="btn btn-ghost" onClick={() => setPreview(null)}>Close</button>}
-        >
-          {preview.error ? (
-            <div className="alert alert-error">{preview.error}</div>
-          ) : preview.html === null ? (
-            <Spinner label="Loading…" />
-          ) : (
-            <iframe
-              title={preview.doc.name}
-              sandbox=""
-              srcDoc={preview.html}
-              style={{ width: '100%', height: '70vh', border: '1px solid var(--border)', borderRadius: 6, background: '#fff' }}
-            />
-          )}
-        </Modal>
-      )}
-    </>
+      {loading ? (
+        <Spinner label="Loading…" />
+      ) : error ? (
+        <div className="alert alert-error" style={{ margin: 16 }}>{error}</div>
+      ) : html !== null ? (
+        <iframe
+          title={document.title}
+          sandbox=""
+          srcDoc={html}
+          style={{ width: '100%', height: '70vh', border: 'none', background: '#fff', display: 'block' }}
+        />
+      ) : null}
+    </div>
   );
 }
