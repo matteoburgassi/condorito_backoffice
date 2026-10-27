@@ -42,7 +42,7 @@ type ContentValues = {
 };
 
 const ATOM_FUNCTION = 'get-atom-legal-document';
-const ATOM_DEFAULT_LOCALE = 'es';
+const ATOM_DEFAULT_LOCALE = 'fr';
 
 async function invokeAtom<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke(ATOM_FUNCTION, { body });
@@ -941,7 +941,7 @@ function AtomPreview({ atomProductId, document }: { atomProductId: string; docum
             id="atom-preview-locale"
             value={locale}
             onChange={(e) => setLocale(e.target.value)}
-            placeholder="es"
+            placeholder="fr"
             style={{ width: 72 }}
           />
           <button type="submit" className="btn btn-ghost btn-sm" disabled={loading}>
